@@ -72,6 +72,11 @@ class Chunk:
     source: str  # path of the note relative to the data folder, with "/" separators
     heading: str  # full path such as "Projects > Line 3 retrofit"; empty before any heading
 
+    @property
+    def label(self) -> str:
+        """Where the chunk comes from, e.g. "notes/work/projects.md | Projects > Line 3"."""
+        return f"{self.source} | {self.heading}" if self.heading else self.source
+
 
 class Retriever(Protocol):
     """Anything that can find the chunks most relevant to a question."""
