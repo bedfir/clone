@@ -3,7 +3,7 @@
 Two-week sprints. End of each sprint: demo, 10-minute retro, backlog reordering.
 Stories are written by the lead, implemented by Claude Code, accepted by the product owner.
 
-## Sprint 1: "The clone speaks" (current)
+## Sprint 1: "The clone speaks" (done)
 
 Sprint goal: the smallest useful clone. You ask a question about yourself and the answer rings true.
 
@@ -83,31 +83,98 @@ Acceptance criteria:
 - [ ] Ask 10 questions about yourself and rate each answer from 1 to 5.
 - [ ] Sprint retro with the lead, using those ratings.
 
+## Sprint 2: "The clone answers to its owner" (current)
+
+Sprint goal: the first visible proof of the positioning. The clone drafts a message to a fictional colleague; the draft goes through the engagement policy, waits for the owner's approval, and appears in a tamper-evident log. Nothing is ever really sent.
+
+Demo script (product owner, with the product owner's private persona):
+1. "Julien asks whether the line 2 packer can restart on Friday. Draft him a reply." The draft respects the persona's red line (no restart date without seeing the machine), is held for approval, and shows in `/pending`.
+2. `/approve <id>`: the message lands in the simulated outbox and in the log.
+3. "Send the supplier an order for 8,000 euros of parts." The policy holds or forbids it, and says which rule applied.
+4. A draft to someone who is not in the contacts is refused.
+5. `clone log verify` confirms the log is intact; editing one line by hand makes it fail.
+
+Recommended model for Claude Code: Opus for S2-3 and S2-4, Sonnet for the others.
+
+### S2-1 Writable state and container hardening
+As the owner, I want the clone's own state kept apart from my data, in a hardened container, so that it can record things without being able to change my notes (ADR-007, ADR-009).
+
+Acceptance criteria:
+- [ ] A gitignored `state/` folder, mounted read-write at `/app/state`; `data/` stays read-only.
+- [ ] `.dockerignore` excludes `state/`; the guard test checks it.
+- [ ] The `clone` service runs with a read-only root filesystem, all Linux capabilities dropped and `no-new-privileges`.
+- [ ] `compose.yaml` publishes no port; a test fails if one is added.
+- [ ] The README explains `data/` (yours, read-only) versus `state/` (the clone's, writable).
+
+### S2-2 Action log
+As the owner, I want every decision and outgoing message recorded in a log nobody can silently edit, so that I can always check what was done in my name (ADR-008).
+
+Acceptance criteria:
+- [ ] Append-only JSON Lines file in `state/`; each entry has a unique ID, a UTC timestamp, a type, a payload and the hash of the previous entry.
+- [ ] `clone log` lists recent entries; `clone log verify` checks the whole chain and reports the first broken entry.
+- [ ] Tests: tampering with, deleting or reordering an entry is detected.
+- [ ] The log never contains secrets; the format is documented in `docs/ARCHITECTURE.md`.
+
+### S2-3 Engagement policy
+As the owner, I want a rule to decide what the clone may do alone, what needs my approval and what is forbidden, so that nothing commits me without my say (ADR-006).
+
+Acceptance criteria:
+- [ ] Typed proposals (at least: outgoing message), each with a unique ID.
+- [ ] A policy file `data/policy.toml` (read with the standard library) maps proposal types and recipient categories to `allow`, `approve` or `forbid`.
+- [ ] No policy file, or a case it does not cover: the decision is `approve`. A message to an unknown recipient is `forbid`.
+- [ ] Every decision is logged with the rule that produced it.
+- [ ] The policy is the only path from a proposal to an action; a test shows the outbox cannot be written without a policy decision.
+- [ ] `example/` gets a commented `policy.toml`.
+
+### S2-4 Simulated outgoing channel
+As the owner, I want to ask the clone to draft a message to a colleague and approve it before it goes, so that I see the representative's core loop working end to end.
+
+Acceptance criteria:
+- [ ] `data/contacts.toml` lists fictional contacts with a name and a category (colleague, manager, supplier...); `example/` gets one.
+- [ ] The model can propose a message through a tool (for example `draft_message(recipient, text)`); calling it creates a proposal, never a send.
+- [ ] The CLI shows each new proposal with its policy decision; `/pending`, `/approve <id>` and `/reject <id>` manage the queue.
+- [ ] Approved messages are written to `state/outbox/`, clearly marked as simulated, and logged; rejected ones are logged too.
+- [ ] Contact messages are never fed back into a prompt as instructions (rule 8).
+- [ ] The system prompt's rule 3 still holds: drafts are written for the owner, never signed as the owner.
+
+### S2-5 Real-model evaluation set
+As the lead, I want a scripted set of questions run against the real model, so that changes to the prompt or retrieval are checked the way the product owner checked Sprint 1.
+
+Acceptance criteria:
+- [ ] `clone eval` runs a list of questions from a file in `example/` against the example persona and writes a readable report to `state/`.
+- [ ] Each question can state expectations (must cite, must say it does not know, must refuse); simple checks flag clear failures.
+- [ ] It is opt-in, needs the API key, and is never part of `pytest`.
+- [ ] Covers the Sprint 1 grid, the false self-correction scenario and the Sprint 2 demo.
+
+### S2-6 Product owner demo and retro
+- [ ] Run the demo script above with the product owner's private persona.
+- [ ] Sprint retro with the lead; decide whether the project is ready to be published.
+
+### Stretch: S2-7 Vector search
+Only if S2-1 to S2-5 are done: SQLite + embeddings behind the existing retrieval interface, so that "studies" finds "training" and "running" finds "run".
+
 ## Next (priority order)
 
-Phase 1, continued (Sprint 2 candidates):
-1. Engagement policy: typed proposals, policy file in `data/`, default "needs approval" (ADR-006)
-2. Action log: append-only, hash-chained, unique entry IDs (ADR-006, ADR-008)
-3. Container hardening: read-only root filesystem, dropped capabilities, no published ports (ADR-007)
-4. Vector search (SQLite + embeddings) behind the same retrieval interface
-5. Local API gateway on the internal network only
-6. Web / PWA interface, reachable from localhost only by default
-7. Streaming responses
-8. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
+Phase 1, continued:
+1. Vector search (SQLite + embeddings) behind the same retrieval interface
+2. Local API gateway on the internal network only
+3. Web / PWA interface, reachable from localhost only by default
+4. Streaming responses
+5. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
 
 Phase 2:
-9. First MCP tool, reachable only through the engagement policy
-10. OPC UA virtual factory simulator and its MCP server
+6. First MCP tool, reachable only through the engagement policy
+7. OPC UA virtual factory simulator and its MCP server
 
 Phase 3:
-11. Public memory store and isolated representative service (ADR-007)
-12. Approval queue between the representative and the owner
-13. Interlocutor profiles
-14. Signed outgoing messages (ADR-008)
+8. Public memory store and isolated representative service (ADR-007)
+9. Approval queue between the representative and the owner
+10. Interlocutor profiles
+11. Signed outgoing messages (ADR-008)
 
 Later:
-15. Remote access through a private VPN, as an explicit opt-in
-16. Agent-to-agent API with owner-verifiable identity
+12. Remote access through a private VPN, as an explicit opt-in
+13. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 

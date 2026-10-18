@@ -137,3 +137,9 @@ Accepted in principle; the signing mechanism is chosen in Phase 3.
 - From Sprint 2, the action log is append-only and hash-chained, and each entry has a unique ID, so it can be signed later without changing its format.
 - When the representative ships, every outgoing message is signed with a key held by the owner, and its log entry links the message to the owner's approval when one was required.
 - The identity format follows the emerging agent-identity work at that time; no draft standard is adopted before then.
+
+### ADR-009: The clone's own state lives in `state/`, apart from the owner's data
+Accepted.
+- `data/` belongs to the owner: notes, personality, policy, contacts. It is mounted read-only; the clone never writes there.
+- `state/` belongs to the clone: action log, pending proposals, simulated outbox, evaluation reports. It is gitignored, excluded from every image, and mounted read-write.
+- Keeping them apart means a compromised or buggy clone can record things but cannot rewrite what its owner said.
