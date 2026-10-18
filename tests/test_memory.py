@@ -225,6 +225,41 @@ def test_ligature_in_a_note_matches_plain_question() -> None:
     assert make_memory(("Corps", "Le coeur bat")).search("CŒUR", 5)
 
 
+# --- stable IDs ----------------------------------------------------------------------------
+
+
+def test_chunk_id_is_short_hex_and_deterministic() -> None:
+    chunk = Chunk(text="x", source="notes/a.md", heading="A > B")
+
+    assert len(chunk.id) == 8
+    assert int(chunk.id, 16) >= 0
+    assert chunk.id == Chunk(text="other text", source="notes/a.md", heading="A > B").id
+
+
+def test_chunk_id_depends_on_source_and_heading_path_only() -> None:
+    base = Chunk(text="x", source="notes/a.md", heading="A > B")
+
+    assert base.id != Chunk(text="x", source="notes/b.md", heading="A > B").id
+    assert base.id != Chunk(text="x", source="notes/a.md", heading="A > C").id
+    assert base.id != Chunk(text="x", source="notes/a.md", heading="B").id
+
+
+def test_duplicate_headings_in_one_note_get_distinct_ids() -> None:
+    chunks = split_chunks("# Todo\nfirst\n# Todo\nsecond\n", "notes/a.md")
+
+    assert [c.occurrence for c in chunks] == [0, 1]
+    assert chunks[0].id != chunks[1].id
+    assert chunks[0].id == split_chunks("# Todo\nfirst\n", "notes/a.md")[0].id
+
+
+def test_ids_of_the_example_persona_are_unique_and_survive_a_reload() -> None:
+    first = [c.id for c in Memory.load(EXAMPLE).chunks]
+    second = [c.id for c in Memory.load(EXAMPLE).chunks]
+
+    assert first == second
+    assert len(set(first)) == len(first)
+
+
 # --- retrieval interface --------------------------------------------------------------------
 
 
