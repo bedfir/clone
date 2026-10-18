@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 
+from clone.actionlog import ActionLog
 from clone.memory import Chunk, Retriever
 from clone.model import Message, ModelClient
 from clone.personality import Personality
@@ -118,6 +119,7 @@ class Brain:
         *,
         max_turns: int = DEFAULT_MAX_TURNS,
         retrieval_limit: int = DEFAULT_RETRIEVAL_LIMIT,
+        log: ActionLog | None = None,
     ) -> None:
         if max_turns < 1:
             raise ValueError("max_turns must be at least 1")
@@ -126,9 +128,20 @@ class Brain:
         self.model = model
         self.max_turns = max_turns
         self.retrieval_limit = retrieval_limit
+        self.log = log
         self._history: list[Message] = []
         self._previous_question = ""
         self._last_sources: list[Chunk] = []
+
+    def start_session(self, chunk_count: int) -> None:
+        """Record in the action log that a session started.
+
+        Only the model name and the size of the memory are logged: the log records what is
+        done in the owner's name, never questions, answers or notes. Raises ActionLogError
+        if the log cannot be written.
+        """
+        if self.log is not None:
+            self.log.append("session.started", {"model": self.model.model, "chunks": chunk_count})
 
     @property
     def last_sources(self) -> list[Chunk]:

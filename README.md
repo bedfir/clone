@@ -84,6 +84,7 @@ Requires Python 3.10+.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+mkdir -p state
 export ANTHROPIC_API_KEY=your-key-here
 clone                       # chat; use `clone --data <path>` for another data folder
 pytest
@@ -100,9 +101,23 @@ ruff check && ruff format --check
 | `/reload` | Reload your notes and personality after editing them |
 | `/quit` | Leave (Ctrl-D works too) |
 
+The folder for the clone's own state is `./state` (or `clone --state <path>`); it must exist before you start.
+
 Anything else is a question. The clone answers from your notes, says so when the answer is not in them, and may challenge you. It is an AI acting for you, never you.
 
 Errors such as a missing API key or no network are shown as a short message; the chat keeps going.
+
+### The action log
+
+Every session is recorded in `state/log.jsonl`, an append-only log where each entry carries the hash of the one before it, so nobody can silently edit, delete or reorder history. It records what the clone *does* in your name, never what you say to it: no questions, answers, notes or secrets.
+
+```
+clone log               # the last 20 entries: time, short id, type, payload
+clone log -n 50         # the last 50
+clone log verify        # check the whole chain
+```
+
+`clone log verify` prints `OK: <n> entries, head <12 hex>`. If something was changed it exits with an error and says where, for example `Broken between entries 2 and 3 (ids ...): entry 3 does not match entry 2 as it is now. Entry 2 was modified, or entries were removed or reordered.` Note the head hash somewhere safe: changes to the very last entries cannot be detected by the chain alone, but they change the head. With Docker: `docker compose run --rm clone clone log verify`. The format is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#action-log).
 
 ### Your data
 

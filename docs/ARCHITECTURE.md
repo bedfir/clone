@@ -71,13 +71,15 @@ clone/
 │   ├── memory.py        # notes loading, chunking, retrieval
 │   ├── personality.py   # personality loading
 │   ├── model.py         # model client (only module importing the SDK)
+│   ├── actionlog.py     # append-only, hash-chained action log (imports nothing from the package)
 │   ├── brain.py         # orchestration
 │   └── interfaces/
 │       └── cli.py       # terminal adapter
 ├── example/             # fictional persona, safe to commit
 │   ├── personality.md
 │   └── notes/*.md
-├── data/                # the user's real data (gitignored)
+├── data/                # the owner's real data (gitignored, mounted read-only)
+├── state/               # the clone's own state, e.g. the action log (gitignored, writable)
 ├── tests/
 ├── docs/ARCHITECTURE.md
 ├── Dockerfile
@@ -88,13 +90,40 @@ clone/
 └── pyproject.toml
 ```
 
-Dependency direction: `interfaces → brain → (memory, personality, model)`. Lower layers never import higher ones.
+Dependency direction: `interfaces → brain → (memory, personality, model, actionlog)`. Lower layers never import higher ones.
 
 ## Data format
 
 `data/` (and `example/`) contains:
 - `personality.md`: free Markdown describing who the user is, their style, values and red lines.
 - `notes/`: any number of Markdown files, nested folders allowed. Each heading starts a new memory chunk; a chunk keeps its source file and heading for traceability.
+
+## Action log
+
+The action log is the owner's record of what the clone did in their name (ADR-008). It is a tamper-evident chain, not a secret store: it never contains questions, answers, note content or secrets.
+
+- **File:** `state/log.jsonl` (ADR-009), written by `clone/actionlog.py`. The folder is chosen with `clone --state <path>` (default `./state`) and must exist and be writable; the clone never creates it.
+- **Entries:** one JSON object per line, UTF-8, with five fields:
+
+  | Field | Content |
+  |---|---|
+  | `id` | uuid4, 32 hex characters |
+  | `ts` | UTC, RFC 3339 with `Z`, millisecond precision, e.g. `2026-10-18T13:40:12.123Z` |
+  | `type` | dotted lowercase string, e.g. `session.started` |
+  | `payload` | JSON object, specific to the type |
+  | `prev` | hash of the previous entry's line; 64 zeros for the first entry |
+
+- **Serialization:** `json.dumps(entry, ensure_ascii=False, sort_keys=True, separators=(",", ":"))`, then a newline.
+- **Hashing rule:** `prev` is the SHA-256 (hex) of the previous line's exact bytes as written, without the trailing newline. Verification hashes the raw lines and never re-serializes them.
+- **Appending:** the file is opened in append mode, locked exclusively (`fcntl.flock`) for the whole append, and the previous line is read under that lock, so two sessions cannot fork the chain. Each entry is one write, flushed and `fsync`ed.
+- **Logged today:** `session.started` with the model name and the number of memory chunks. Decisions and messages join in later stories through the same API.
+- **Reading:** `clone log [-n N]` shows the last N entries (default 20). `clone log verify` checks the whole chain, reports the first break and exits with an error. A break is reported as a **link between two entries**, because the chain cannot say which of the two is at fault: `Broken between entries 2 and 3 (ids ...): entry 3 does not match entry 2 as it is now. Entry 2 was modified, or entries were removed or reordered.` Two other cases have their own wording: an entry that cannot be read (`Broken at entry <k> (id <short id>): invalid JSON` or `missing field ...`), and a first entry that does not start the chain (entries before it were removed, or it was modified).
+
+**What the chain detects:** editing an entry (the entry after it no longer matches), deleting an entry, inserting a forged one, reordering entries, and a corrupt line.
+
+**What it cannot detect on its own:** changing or deleting the **last** entry, or the last few, because no later entry refers to their hash. The head hash printed by `clone log verify` (the first 12 hex characters of the last line's hash) is what closes this gap: an owner who notes it elsewhere can see that the tail changed. Signing the head with an owner-held key is planned for Phase 3 (ADR-008). Until then the log shows tampering in the middle of the history, and tail changes only to someone who kept the head.
+
+**Platform:** `fcntl` locking means POSIX systems (Linux, macOS, the Docker containers used here).
 
 ## Architecture Decision Records
 
