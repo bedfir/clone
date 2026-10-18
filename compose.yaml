@@ -6,10 +6,38 @@ services:
       target: dev
     image: clone:dev
     volumes:
-      # Personal data stays on the host, read-only while the clone only reads memory (ADR-005).
-      - ./data:/app/data:ro
+      # Long syntax with create_host_path: false asks Docker not to create a missing folder (it
+      # would be owned by root, unusable by uid 1000). Engines that honor it stop with a clear
+      # error; Docker Desktop with WSL creates it anyway, so create both folders first.
+      #
+      # The owner's data stays on the host, read-only: the clone never writes there (ADR-005).
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+        bind:
+          create_host_path: false
+      # The clone's own state (action log, pending proposals, ...): writable, apart from data/
+      # (ADR-009). Create it before the first run: mkdir state
+      - type: bind
+        source: ./state
+        target: /app/state
+        bind:
+          create_host_path: false
     env_file:
       - path: .env
         required: false
+    # Hardening (ADR-007). No port is published: the clone is not reachable from outside.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      # The root filesystem is read-only, so scratch space and tool caches go to memory.
+      - /tmp
+    environment:
+      PYTEST_ADDOPTS: -o cache_dir=/tmp/.pytest_cache
+      RUFF_CACHE_DIR: /tmp/.ruff_cache
     stdin_open: true
     tty: true

@@ -36,7 +36,8 @@ Requires Docker with Compose v2.24 or later.
 **1. Set up your data.** Start from the fictional example persona, then rewrite it with your own personality and notes (see [Your data](#your-data)):
 
 ```
-cp -r example data          # your private data folder, ignored by Git
+cp -r example data          # your data: personality and notes, ignored by Git
+mkdir state                 # the clone's own state, ignored by Git
 ```
 
 **2. Set your API key.** Create a `.env` file at the repository root (Git ignores it):
@@ -59,7 +60,20 @@ docker compose run --rm clone pytest
 docker compose run --rm clone ruff check
 ```
 
-`data/` is mounted read-only at `/app/data`. `.env` is loaded at runtime. Neither is ever copied into an image.
+Two folders, two owners:
+
+| Folder | Belongs to | In the container | Contents |
+|---|---|---|---|
+| `data/` | You | `/app/data`, **read-only** | Your personality and notes. The clone never writes here, so it cannot rewrite what you said. |
+| `state/` | The clone | `/app/state`, **read-write** | What the clone records itself (later: action log, pending proposals). |
+
+Git ignores both, and neither (nor `.env`) is ever copied into an image.
+
+Create both folders yourself before the first start. `compose.yaml` asks Docker not to create a missing folder (`create_host_path: false`), and an engine that honors this stops with a "bind source path does not exist" error. Docker Desktop with WSL (version 4.95, the one tested) ignores it and creates the folder as `root`, which the clone cannot write to; if that happens, remove the folder and create it yourself.
+
+The container runs as user **uid 1000**. If your host user has a different uid, make `state/` writable by uid 1000 (for example `chmod o+w state`, or `chown 1000 state`).
+
+The container is hardened: read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, and no published port, so nothing outside can reach it. Scratch files and tool caches go to a temporary in-memory `/tmp`.
 The source is baked into the image, so rebuild after a change: `docker compose run --rm --build clone pytest`.
 
 ### Without Docker

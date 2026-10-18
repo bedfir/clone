@@ -19,12 +19,14 @@ CMD ["clone"]
 
 # Development image: adds pytest, ruff, the tests and the fictional example persona.
 FROM base AS dev
-RUN pip install ".[dev]"
+RUN pip install ".[dev]" && rm -rf build ./*.egg-info
 COPY --chown=clone:clone tests ./tests
 COPY --chown=clone:clone example ./example
+# Configuration files checked by tests/test_docker.py (no secrets in them).
+COPY --chown=clone:clone compose.yaml .dockerignore .gitignore ./
 USER clone
 
 # Runtime image (default target, keep it last): runtime dependencies only.
 FROM base AS runtime
-RUN pip install .
+RUN pip install . && rm -rf build ./*.egg-info
 USER clone
