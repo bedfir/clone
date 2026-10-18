@@ -15,8 +15,7 @@ RUN chown clone:clone /app
 COPY --chown=clone:clone pyproject.toml README.md LICENSE ./
 COPY --chown=clone:clone clone ./clone
 
-# Replaced by the `clone` command in story S1-5.
-CMD ["python", "-c", "import clone; print(clone.__version__)"]
+CMD ["clone"]
 
 # Development image: adds pytest, ruff, the tests and the fictional example persona.
 FROM base AS dev

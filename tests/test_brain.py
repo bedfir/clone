@@ -1,11 +1,16 @@
 """Brain: the system prompt and the conversation loop (story S1-4)."""
 
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from fakes import FakeModel
 
-from clone.brain import Brain, build_system_prompt
+from clone.brain import (
+    DEFAULT_MAX_TURNS,
+    Brain,
+    build_system_prompt,
+    max_turns_from_env,
+)
 from clone.memory import Chunk, Memory
 from clone.model import Message, ModelError
 from clone.personality import DEFAULT_PERSONALITY, Personality, load_personality
@@ -43,23 +48,6 @@ I drink green tea.
 
 --- [2] notes/misc.md ---
 Intro text."""
-
-
-class FakeModel:
-    """A `ModelClient` that records what it receives and answers from a script."""
-
-    model = "fake-model"
-
-    def __init__(self, *answers: str, error: Exception | None = None) -> None:
-        self.answers = list(answers) or ["fake answer"]
-        self.error = error
-        self.calls: list[tuple[str, list[Message]]] = []
-
-    def complete(self, system: str, messages: Sequence[Message]) -> str:
-        self.calls.append((system, list(messages)))
-        if self.error:
-            raise self.error
-        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
 
 
 def make_brain(model: FakeModel, **options: int) -> Brain:
@@ -280,3 +268,25 @@ def test_a_follow_up_finds_the_chunk_of_the_previous_topic() -> None:
     system = model.calls[1][0]
     assert system.index("Hotel Roma") < system.index("Hotel du Nord")
     assert [c.source for c in brain.last_sources][0] == "notes/rome.md"
+
+
+# --- configuration -------------------------------------------------------------------------
+
+
+def test_max_turns_defaults_and_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLONE_MAX_TURNS", raising=False)
+    assert max_turns_from_env() == DEFAULT_MAX_TURNS
+
+    monkeypatch.setenv("CLONE_MAX_TURNS", " ")
+    assert max_turns_from_env() == DEFAULT_MAX_TURNS
+
+    monkeypatch.setenv("CLONE_MAX_TURNS", "3")
+    assert max_turns_from_env() == 3
+
+
+@pytest.mark.parametrize("bad", ["0", "-2", "many", "1.5"])
+def test_invalid_max_turns_is_a_readable_error(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
+    monkeypatch.setenv("CLONE_MAX_TURNS", bad)
+
+    with pytest.raises(ValueError, match="CLONE_MAX_TURNS must be a whole number"):
+        max_turns_from_env()

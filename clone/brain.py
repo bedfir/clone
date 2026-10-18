@@ -6,6 +6,7 @@ persistent state goes through the memory layer.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 from clone.memory import Chunk, Retriever
@@ -13,6 +14,7 @@ from clone.model import Message, ModelClient
 from clone.personality import Personality
 
 DEFAULT_MAX_TURNS = 10
+MAX_TURNS_ENV_VAR = "CLONE_MAX_TURNS"
 DEFAULT_RETRIEVAL_LIMIT = 5
 
 RULES = """\
@@ -44,6 +46,20 @@ NO_MEMORY = (
     "No relevant notes were found for this question: nothing in memory answers it. If it is "
     "about the user, say that it is not in your memory instead of guessing."
 )
+
+
+def max_turns_from_env() -> int:
+    """The history cap: `CLONE_MAX_TURNS` if set and not blank, else the default.
+
+    Raises ValueError with a readable message if the value is not a whole number >= 1.
+    """
+    raw = os.environ.get(MAX_TURNS_ENV_VAR, "").strip()
+    if not raw:
+        return DEFAULT_MAX_TURNS
+    value = int(raw) if raw.isdigit() else 0
+    if value < 1:
+        raise ValueError(f"{MAX_TURNS_ENV_VAR} must be a whole number of at least 1, not {raw!r}.")
+    return value
 
 
 def build_system_prompt(personality: str, chunks: Sequence[Chunk]) -> str:
