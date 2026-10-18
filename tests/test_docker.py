@@ -10,5 +10,5 @@ DOCKERIGNORE = Path(__file__).resolve().parent.parent / ".dockerignore"
 @pytest.mark.skipif(not DOCKERIGNORE.is_file(), reason="absent inside the image")
 def test_dockerignore_excludes_data_and_secrets() -> None:
     patterns = {line.strip() for line in DOCKERIGNORE.read_text().splitlines()}
-    for required in ("data/", ".env", ".git/", ".venv/", "__pycache__/"):
+    for required in ("data/", ".env", ".git/", ".venv/", "**/__pycache__/", "**/*.pyc"):
         assert required in patterns
