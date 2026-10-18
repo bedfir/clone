@@ -22,6 +22,8 @@ FROM base AS dev
 RUN pip install ".[dev]"
 COPY --chown=clone:clone tests ./tests
 COPY --chown=clone:clone example ./example
+# Configuration files checked by tests/test_docker.py (no secrets in them).
+COPY --chown=clone:clone compose.yaml .dockerignore .gitignore ./
 USER clone
 
 # Runtime image (default target, keep it last): runtime dependencies only.

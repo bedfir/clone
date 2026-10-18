@@ -1,11 +1,11 @@
-# Personal data and secrets must never enter an image (ADR-005).
+# Personal data, the clone's own state and secrets must never enter an image (ADR-005, ADR-009).
 data/
+state/
 .env
 .env.*
 
 # Version control and local environments
 .git/
-.gitignore
 .venv/
 venv/
 
@@ -18,7 +18,6 @@ venv/
 build/
 dist/
 
-# Docker files themselves
+# The Dockerfile is not needed inside an image. compose.yaml, .dockerignore and .gitignore
+# are copied into the dev image on purpose, so that their guard tests run there too.
 Dockerfile
-compose.yaml
-.dockerignore

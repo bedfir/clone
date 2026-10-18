@@ -1,5 +1,6 @@
 # Private space: never publish
 data/
+state/
 .env
 
 # Python
