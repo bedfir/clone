@@ -174,6 +174,10 @@ Environment variables, set in `.env` (Docker) or in your shell:
 - **Traceability**: a log of everything decided, said and done on the user's behalf.
 - **Small and working**: every sprint ships something that runs.
 
+## Security
+
+Found a vulnerability? Please report it privately, never in a public issue: see [SECURITY.md](SECURITY.md).
+
 ## License
 
 Apache 2.0, see [LICENSE](LICENSE).
