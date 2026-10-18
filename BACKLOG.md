@@ -136,6 +136,9 @@ Acceptance criteria:
 - [ ] Approved messages are written to `state/outbox/`, clearly marked as simulated, and logged; rejected ones are logged too.
 - [ ] Contact messages are never fed back into a prompt as instructions (rule 8).
 - [ ] The system prompt's rule 3 still holds: drafts are written for the owner, never signed as the owner.
+- [ ] Approved messages carry a transparency notice added by code (written by the owner's AI assistant, approved by the owner). Docs and demo present it as a transparency notice, never as a signature.
+- [ ] Pending proposals survive a restart only if they match the log. Docs state the limit plainly: this protects against mistakes and simple tampering, not against someone who can rewrite `state/`; strong protection comes with the owner's key (ADR-008).
+- [ ] The log never holds a message's text, only its hash; the text lives in the outbox file, which can be erased (see Next: log content and erasure).
 
 ### S2-5 Real-model evaluation set
 As the lead, I want a scripted set of questions run against the real model, so that changes to the prompt or retrieval are checked the way the product owner checked Sprint 1.
@@ -168,14 +171,15 @@ Phase 2:
 8. OPC UA virtual factory simulator and its MCP server
 
 Phase 3:
-9. Public memory store and isolated representative service (ADR-007)
-10. Approval queue between the representative and the owner
-11. Interlocutor profiles
-12. Signed outgoing messages (ADR-008)
+9. Log content and the right to erasure, before the representative ships: the log will hold third parties' personal data, so GDPR applies. Separate content from its fingerprint: the append-only log keeps ids and salted hashes, the content (texts, names) lives in erasable stores; erasing the content and its salt leaves the chain verifiable but no longer linkable to the person. Covers recipient names, which the log holds by name until then.
+10. Public memory store and isolated representative service (ADR-007)
+11. Approval queue between the representative and the owner
+12. Interlocutor profiles
+13. Signed outgoing messages (ADR-008)
 
 Later:
-13. Remote access through a private VPN, as an explicit opt-in
-14. Agent-to-agent API with owner-verifiable identity
+14. Remote access through a private VPN, as an explicit opt-in
+15. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 
