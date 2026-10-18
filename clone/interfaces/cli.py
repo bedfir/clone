@@ -16,9 +16,12 @@ from typing import TextIO
 
 from clone.actionlog import ActionLog, ActionLogError
 from clone.brain import Brain, max_turns_from_env
+from clone.contacts import Contacts, ContactsError
+from clone.engagement import Engagement
 from clone.memory import Memory, MissingDataError
 from clone.model import AnthropicClient, ModelClient, ModelError
 from clone.personality import Personality, load_personality
+from clone.policy import Policy, PolicyError
 
 DEFAULT_DATA_DIR = Path("data")
 DEFAULT_STATE_DIR = Path("state")
@@ -105,7 +108,21 @@ def run_chat(
         print(describe_load_error(error, data_dir), file=err)
         return 1
 
-    brain = Brain(memory, personality, model, max_turns=max_turns, log=ActionLog(state_dir))
+    try:
+        policy, contacts = Policy.load(data_dir), Contacts.load(data_dir)
+    except (PolicyError, ContactsError) as error:
+        print(error, file=err)
+        return 1
+
+    log = ActionLog(state_dir)
+    brain = Brain(
+        memory,
+        personality,
+        model,
+        max_turns=max_turns,
+        log=log,
+        engagement=Engagement(policy, contacts, log, state_dir),
+    )
     try:
         brain.start_session(len(memory.chunks))
     except ActionLogError as error:

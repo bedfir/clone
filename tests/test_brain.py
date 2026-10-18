@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fakes import FakeModel
 
+from clone.actionlog import ActionLog
 from clone.brain import (
     DEFAULT_MAX_TURNS,
     Brain,
@@ -12,9 +13,13 @@ from clone.brain import (
     build_user_turn,
     max_turns_from_env,
 )
+from clone.contacts import Contacts
+from clone.engagement import Engagement
 from clone.memory import Chunk, Memory
 from clone.model import Message, ModelError
 from clone.personality import DEFAULT_PERSONALITY, Personality, load_personality
+from clone.policy import Policy
+from clone.proposals import OutgoingMessage
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "example"
 
@@ -385,3 +390,28 @@ def test_invalid_max_turns_is_a_readable_error(monkeypatch: pytest.MonkeyPatch, 
 
     with pytest.raises(ValueError, match="CLONE_MAX_TURNS must be a whole number"):
         max_turns_from_env()
+
+
+# --- proposing ------------------------------------------------------------------------------
+
+
+def test_the_brain_hands_proposals_to_the_engagement_gate(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    log = ActionLog(state)
+    gate = Engagement(Policy.load(EXAMPLE), Contacts.load(EXAMPLE), log, state)
+    brain = Brain(Memory([]), Personality(text="p"), FakeModel(), log=log, engagement=gate)
+    proposal = OutgoingMessage.new("Julien Martin", "Hello")
+
+    decision = brain.propose(proposal)
+
+    assert decision.outcome == "approve"
+    assert gate.pending() == [proposal]
+    assert [e.type for _, e in log.recent(10) if e] == ["policy.decided"]
+
+
+def test_a_brain_without_a_gate_cannot_propose() -> None:
+    brain = make_brain(FakeModel())
+
+    with pytest.raises(RuntimeError, match="no engagement gate"):
+        brain.propose(OutgoingMessage.new("Julien Martin", "Hello"))

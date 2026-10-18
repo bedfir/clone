@@ -78,7 +78,7 @@ The source is baked into the image, so rebuild after a change: `docker compose r
 
 ### Without Docker
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ```
 python -m venv .venv
@@ -119,11 +119,22 @@ clone log verify        # check the whole chain
 
 `clone log verify` prints `OK: <n> entries, head <12 hex>`. If something was changed it exits with an error and says where, for example `Broken between entries 2 and 3 (ids ...): entry 3 does not match entry 2 as it is now. Entry 2 was modified, or entries were removed or reordered.` Note the head hash somewhere safe: changes to the very last entries cannot be detected by the chain alone, but they change the head. With Docker: `docker compose run --rm clone clone log verify`. The format is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#action-log).
 
+### Who the clone may write to
+
+Two optional files in `data/` control messages the clone may prepare in your name (nothing is ever really sent yet):
+
+- `contacts.toml` lists the people it may write to, with a category each (`colleague`, `manager`, `supplier`...). Names must match exactly (case and surrounding spaces are ignored). Anyone not listed is unknown, and a message to an unknown person is always refused.
+- `policy.toml` says what happens per category: `approve` (the clone prepares it and waits for you) or `forbid`. Without this file everything known needs your approval. `allow` is not available for messages: nothing leaves without your say.
+
+Both are checked when the chat starts; a mistake stops it with a message naming the file. Examples with comments are in [`example/contacts.toml`](example/contacts.toml) and [`example/policy.toml`](example/policy.toml). Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#engagement-policy).
+
 ### Your data
 
 ```
 data/
 ├── personality.md      # who you are: style, values, red lines (optional)
+├── contacts.toml       # who the clone may write to (optional)
+├── policy.toml         # what it may do, per category (optional)
 └── notes/              # Markdown notes, nested folders allowed
     └── *.md            # each heading starts a new memory chunk
 ```

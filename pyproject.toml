@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Open-source, privacy-first personal agent: a digital twin of its user."
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["anthropic>=1.15"]
 
 [project.scripts]
@@ -25,7 +25,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
