@@ -1,17 +1,27 @@
 # Clone
 
-**Your open-source digital twin, keeping your data at home.**
+**The agent that represents you without being able to impersonate you.**
 
-Clone is a headless personal agent: an engine that holds your memory and personality, with interchangeable interfaces plugged into it (terminal, web, mobile, messaging, other agents).
+Clone is an open-source, self-hosted agent that can speak for you to other people and other agents, while staying accountable to you. Nothing that commits you leaves without your approval, and everything it says on your behalf can be traced back to you.
 
 > The code is public. Your data never is: it stays in your `data/` folder, which Git ignores.
 
+## Why Clone
+
+Self-hosted personal agents have proven that people want an agent of their own. They have also shown that security added afterwards does not hold: exposed instances, malicious plugins, prompt injection. Clone is built the other way round, with the guardrails as the foundation.
+
 ## Vision
 
-One brain, two faces:
+One owner, two faces, one wall between them:
 
 - **The assistant** (facing you): full access to your memory; it helps, challenges and proposes.
-- **The representative** (facing others): sees only your public memory, answers simple questions for you and asks your approval for anything that commits you.
+- **The representative** (facing others): runs separately, sees only your public memory, answers simple questions for you and asks your approval for anything that commits you.
+
+Three properties define Clone:
+
+1. **It answers to you.** Every action that commits you goes through an engagement policy built into the brain; by default, it needs your approval.
+2. **It cannot reach what it must not see.** The public face is isolated from your private memory by the system itself, not by an instruction to the model.
+3. **It cannot impersonate you.** Every message it sends for you is logged and signed, traceable to you as its owner.
 
 ## Status
 
@@ -57,16 +67,17 @@ ruff check && ruff format --check
 
 | Phase | Content |
 |---|---|
-| 1 – The brain | Memory, personality, assistant mode |
-| 2 – The hands | Tools via MCP, connection to an OPC UA virtual factory |
-| 3 – The public face | Representative mode, interlocutor profiles, approval queue |
-| 4 – The opening | API to talk with other agents |
+| 1 – The brain | Memory, personality, assistant mode, engagement policy, action log |
+| 2 – The hands | Tools via MCP, all gated by the engagement policy; OPC UA virtual factory |
+| 3 – The public face | Isolated representative service, public memory, interlocutor profiles, signed messages |
+| 4 – The opening | Agent-to-agent API with an identity verifiable back to the owner |
 
 ## Principles
 
 - **Privacy first**: local data, least access, no personal data in the repository.
 - **Transparency**: the clone always presents itself as an AI, never as the person.
-- **Traceability**: eventually, a log of everything said and done on the user's behalf.
+- **Secure by default**: nothing is exposed on the network unless you explicitly choose to.
+- **Traceability**: a log of everything decided, said and done on the user's behalf.
 - **Small and working**: every sprint ships something that runs.
 
 ## License

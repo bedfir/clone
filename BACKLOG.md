@@ -75,16 +75,28 @@ Acceptance criteria:
 
 ## Next (priority order)
 
-1. Vector search (SQLite + embeddings) behind the same retrieval interface
-2. Local API gateway so several interfaces can plug in
-3. Web / PWA interface
-4. First MCP tool
-5. OPC UA virtual factory simulator and its MCP server
-6. Private / public memory compartments
-7. Representative mode and interlocutor profiles
-8. Approval queue and action log
-9. Remote access through a private VPN
-10. Agent-to-agent API
+Phase 1, continued (Sprint 2 candidates):
+1. Engagement policy: typed proposals, policy file in `data/`, default "needs approval" (ADR-006)
+2. Action log: append-only, hash-chained, unique entry IDs (ADR-006, ADR-008)
+3. Container hardening: read-only root filesystem, dropped capabilities, no published ports (ADR-007)
+4. Vector search (SQLite + embeddings) behind the same retrieval interface
+5. Local API gateway on the internal network only
+6. Web / PWA interface, reachable from localhost only by default
+7. Streaming responses
+
+Phase 2:
+8. First MCP tool, reachable only through the engagement policy
+9. OPC UA virtual factory simulator and its MCP server
+
+Phase 3:
+10. Public memory store and isolated representative service (ADR-007)
+11. Approval queue between the representative and the owner
+12. Interlocutor profiles
+13. Signed outgoing messages (ADR-008)
+
+Later:
+14. Remote access through a private VPN, as an explicit opt-in
+15. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 
