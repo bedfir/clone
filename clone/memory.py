@@ -11,7 +11,7 @@ import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 NOTES_DIR = "notes"
@@ -19,7 +19,9 @@ HEADING_BOOST = 2
 
 _HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _FENCES = ("```", "~~~")
-_WORD = re.compile(r"\w+")
+_WORD = re.compile(r"[^\W_]+")  # letters and digits; "_" separates words
+_LIGATURES = str.maketrans({"œ": "oe", "æ": "ae"})
+HEADING_SEPARATOR = " > "
 
 _STOP_WORDS_EN = """
 a an and are as at be but by do does did for from has have he her his how i if in into is it
@@ -35,17 +37,27 @@ sur t ta tes ton tu un une vos votre vous y
 
 
 def normalize(text: str) -> str:
-    """Lower-case `text` and strip accents, so that "Café" and "cafe" compare equal."""
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    """Lower-case `text`, strip accents and fold ligatures: "Café" and "cafe" compare equal."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold().translate(_LIGATURES))
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
-def tokenize(text: str) -> list[str]:
+def words(text: str) -> list[str]:
     """Split `text` into normalized words."""
     return _WORD.findall(normalize(text))
 
 
-STOP_WORDS = frozenset(tokenize(_STOP_WORDS_EN) + tokenize(_STOP_WORDS_FR))
+def fold_plural(word: str) -> str:
+    """Strip a trailing "s" or "x" from words longer than 3 characters ("cats" -> "cat")."""
+    return word[:-1] if len(word) > 3 and word[-1] in "sx" else word
+
+
+def tokenize(text: str) -> list[str]:
+    """Split `text` into search terms: normalized words with plurals folded."""
+    return [fold_plural(word) for word in words(text)]
+
+
+STOP_WORDS = frozenset(words(_STOP_WORDS_EN) + words(_STOP_WORDS_FR))
 
 
 class MissingDataError(Exception):
@@ -58,7 +70,7 @@ class Chunk:
 
     text: str
     source: str  # path of the note relative to the data folder, with "/" separators
-    heading: str  # empty for text that comes before the first heading
+    heading: str  # full path such as "Projects > Line 3 retrofit"; empty before any heading
 
 
 class Retriever(Protocol):
@@ -72,16 +84,18 @@ class Retriever(Protocol):
 def split_chunks(text: str, source: str) -> list[Chunk]:
     """Split one Markdown note into chunks; each heading starts a new chunk.
 
-    Sections without any text of their own are dropped.
+    A chunk's heading is the path of the headings above it, so a section keeps the context
+    of its parents. Sections without any text of their own are dropped.
     """
     chunks: list[Chunk] = []
-    heading = ""
+    parents: list[tuple[int, str]] = []  # (level, title) of the enclosing headings
     lines: list[str] = []
     in_fence = False
 
     def close_section() -> None:
         body = "\n".join(lines).strip()
         if body:
+            heading = HEADING_SEPARATOR.join(title for _, title in parents)
             chunks.append(Chunk(text=body, source=source, heading=heading))
 
     for line in text.splitlines():
@@ -90,7 +104,10 @@ def split_chunks(text: str, source: str) -> list[Chunk]:
         match = None if in_fence else _HEADING.match(line)
         if match:
             close_section()
-            heading = match.group(1)
+            level = len(line.lstrip().split(maxsplit=1)[0])
+            while parents and parents[-1][0] >= level:
+                parents.pop()
+            parents.append((level, match.group(1)))
             lines = []
         else:
             lines.append(line)
@@ -126,21 +143,34 @@ def _missing_message(problem: str) -> str:
     )
 
 
+def _path_terms(source: str) -> list[str]:
+    """Search terms from a note's folders and file name, without the top `notes/` folder."""
+    parts = PurePosixPath(source).with_suffix("").parts
+    if len(parts) > 1 and parts[0] == NOTES_DIR:
+        parts = parts[1:]
+    return tokenize(" ".join(parts))
+
+
 class KeywordRetriever:
     """Rank chunks by how many of the question's words they contain.
 
-    Case- and accent-insensitive; common English and French words are ignored. A word
-    found in a heading counts extra. Ties keep the order in which the chunks were loaded.
+    Case- and accent-insensitive, with plurals folded; common English and French words
+    are ignored. Words in the heading path or in the note's path (folders and file name)
+    count extra. Ties keep the order in which the chunks were loaded.
     """
 
     def __init__(self, chunks: Iterable[Chunk]) -> None:
         self._index = [
-            (chunk, Counter(tokenize(chunk.text)), frozenset(tokenize(chunk.heading)))
+            (
+                chunk,
+                Counter(tokenize(chunk.text)),
+                frozenset(tokenize(chunk.heading) + _path_terms(chunk.source)),
+            )
             for chunk in chunks
         ]
 
     def search(self, question: str, limit: int) -> list[Chunk]:
-        terms = {t for t in tokenize(question) if t not in STOP_WORDS}
+        terms = {fold_plural(w) for w in words(question) if w not in STOP_WORDS}
         if not terms or limit <= 0:
             return []
 

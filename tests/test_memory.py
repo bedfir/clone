@@ -9,6 +9,7 @@ from clone.memory import (
     KeywordRetriever,
     Memory,
     MissingDataError,
+    fold_plural,
     load_chunks,
     normalize,
     split_chunks,
@@ -51,12 +52,23 @@ def test_loads_the_example_persona() -> None:
 # --- chunking ----------------------------------------------------------------------------
 
 
-def test_each_heading_starts_a_chunk_that_keeps_source_and_heading() -> None:
+def test_each_heading_starts_a_chunk_that_keeps_source_and_heading_path() -> None:
     text = "# Top\n\n## One\nfirst\n\n## Two\nsecond\nline\n"
 
     assert split_chunks(text, "notes/x.md") == [
-        Chunk(text="first", source="notes/x.md", heading="One"),
-        Chunk(text="second\nline", source="notes/x.md", heading="Two"),
+        Chunk(text="first", source="notes/x.md", heading="Top > One"),
+        Chunk(text="second\nline", source="notes/x.md", heading="Top > Two"),
+    ]
+
+
+def test_heading_path_follows_the_outline() -> None:
+    text = "# A\n## B\n### C\nc text\n## D\nd text\n# E\ne text\n#### Deep\ndeep text\n"
+
+    assert [c.heading for c in split_chunks(text, "n.md")] == [
+        "A > B > C",
+        "A > D",
+        "E",
+        "E > Deep",
     ]
 
 
@@ -121,7 +133,7 @@ def test_normalize_ignores_case_and_accents() -> None:
 def test_search_ignores_case_and_accents_on_the_example(question: str) -> None:
     results = Memory.load(EXAMPLE).search(question, 3)
 
-    assert [c.heading for c in results] == ["Mornings"]
+    assert [c.heading for c in results] == ["Habits > Mornings"]
 
 
 @pytest.mark.parametrize("question", ["cafe", "café", "CAFÉ"])
@@ -138,7 +150,7 @@ def test_montreal_matches_with_or_without_accent() -> None:
     accented = memory.search("Montréal", 3)
 
     assert plain == accented
-    assert plain[0].heading == "Travel"
+    assert plain[0].heading == "Preferences > Travel"
 
 
 def test_english_and_french_stop_words_are_ignored() -> None:
@@ -147,6 +159,70 @@ def test_english_and_french_stop_words_are_ignored() -> None:
     assert [c.heading for c in memory.search("What is the train? Quel est le train", 5)] == [
         "Signal"
     ]
+
+
+def test_search_finds_chunks_through_their_parent_headings() -> None:
+    chunks = split_chunks("# Projects\n## Line 3 retrofit\nreplacing relays\n", "n.md")
+
+    assert Memory(chunks).search("projects", 5) == chunks
+
+
+def test_search_finds_chunks_through_the_note_path() -> None:
+    memory = Memory([Chunk(text="relay logic", source="notes/work/projects.md", heading="")])
+
+    assert memory.search("work", 5) == list(memory.chunks)
+    assert memory.search("project", 5) == list(memory.chunks)
+
+
+def test_the_top_notes_folder_is_not_searchable() -> None:
+    memory = Memory([Chunk(text="relay logic", source="notes/work/projects.md", heading="")])
+
+    assert memory.search("notes", 5) == []
+
+
+def test_path_and_heading_words_count_extra() -> None:
+    memory = Memory(
+        [
+            Chunk(text="I like tea", source="notes/a.md", heading="Misc"),
+            Chunk(text="nothing", source="notes/tea.md", heading=""),
+        ]
+    )
+
+    assert [c.source for c in memory.search("tea", 5)] == ["notes/tea.md", "notes/a.md"]
+
+
+def test_what_are_my_projects_at_work_finds_both_project_chunks() -> None:
+    results = Memory.load(EXAMPLE).search("What are my projects at work?", 5)
+
+    assert [(c.source, c.heading) for c in results[:2]] == [
+        ("notes/work/projects.md", "Projects > Line 3 retrofit"),
+        ("notes/work/projects.md", "Projects > OPC UA pilot"),
+    ]
+
+
+# --- plurals and ligatures -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("word", "folded"),
+    [("cats", "cat"), ("prix", "pri"), ("gas", "gas"), ("bus", "bus"), ("cat", "cat"), ("", "")],
+)
+def test_fold_plural_strips_s_or_x_from_words_longer_than_three(word: str, folded: str) -> None:
+    assert fold_plural(word) == folded
+
+
+def test_plural_questions_match_singular_notes_and_back() -> None:
+    assert make_memory(("Pets", "one cat")).search("cats", 5)
+    assert make_memory(("Pets", "many cats")).search("cat", 5)
+
+
+def test_normalize_folds_ligatures() -> None:
+    assert normalize("Cœur Æon") == "coeur aeon"
+
+
+def test_ligature_in_a_note_matches_plain_question() -> None:
+    assert make_memory(("Corps", "Le cœur bat")).search("coeur", 5)
+    assert make_memory(("Corps", "Le coeur bat")).search("CŒUR", 5)
 
 
 # --- retrieval interface --------------------------------------------------------------------
