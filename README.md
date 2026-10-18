@@ -17,7 +17,24 @@ One brain, two faces:
 
 Sprint 1, "The clone speaks", in progress. See [BACKLOG.md](BACKLOG.md).
 
-## Development
+## Getting started
+
+### With Docker (recommended)
+
+Requires Docker with Compose v2.24 or later.
+
+```
+cp -r example data          # your private data folder, ignored by Git; then rewrite it
+docker compose build
+docker compose run --rm clone             # prints the version until the chat lands (S1-5)
+docker compose run --rm clone pytest
+docker compose run --rm clone ruff check
+```
+
+`data/` is mounted read-only at `/app/data`. Secrets such as `ANTHROPIC_API_KEY` go in an optional `.env` file at the repository root, loaded at runtime. Neither `data/` nor `.env` is ever copied into an image.
+The source is baked into the image, so rebuild after a change: `docker compose run --rm --build clone pytest`.
+
+### Without Docker
 
 Requires Python 3.10+.
 
@@ -29,7 +46,7 @@ pytest
 ruff check && ruff format --check
 ```
 
-`example/` holds a fictional persona for tests and demos. Your real data goes in `data/`, which Git ignores; start from the example with `cp -r example data`.
+`example/` holds a fictional persona for tests and demos. Your real data goes in `data/`, which Git ignores.
 
 ## Documentation
 
