@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import shutil
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -522,3 +523,57 @@ def test_clone_log_verify_names_a_corrupt_line(capsys: pytest.CaptureFixture[str
     assert cli.main(["log", "verify", "--state", str(Session.state)]) == 1
 
     assert "Broken at entry 2 (id unknown): invalid JSON" in capsys.readouterr().err
+
+
+# --- policy and contacts at startup ----------------------------------------------------------
+
+
+def data_with(tmp_path: Path, **files: str) -> Path:
+    """A copy of the example data folder with the given files (name -> content) replaced."""
+    data = tmp_path / "data-copy"
+    shutil.copytree(EXAMPLE, data)
+    for name, text in files.items():
+        (data / name).write_text(text, encoding="utf-8")
+    return data
+
+
+@pytest.mark.parametrize(
+    ("file", "text", "problem"),
+    [
+        ("policy.toml", '[outgoing_message]\ndefault = "allow"\n', "'allow' is not available"),
+        ("policy.toml", '[outgoing_message.categories]\nsupplier = "allow"\n', "supplier"),
+        ("policy.toml", "[nonsense]\n", "unknown section 'nonsense'"),
+        ("policy.toml", "[outgoing_message\n", "invalid TOML"),
+        ("contacts.toml", '[[contact]]\nname = "A"\n', "missing or empty 'category'"),
+        (
+            "contacts.toml",
+            '[[contact]]\nname = "A"\ncategory = "x"\n[[contact]]\nname = "a"\ncategory = "y"\n',
+            "Duplicate contact name",
+        ),
+    ],
+)
+def test_an_invalid_policy_or_contacts_file_stops_the_chat_naming_the_file(
+    tmp_path: Path, file: str, text: str, problem: str
+) -> None:
+    data = data_with(tmp_path, **{file: text})
+    session = Session("/quit")
+
+    code = session.run(data=data)
+
+    assert code == 1
+    assert str(data / file) in session.err.getvalue()
+    assert problem in session.err.getvalue()
+    assert NO_TRACE not in session.err.getvalue()
+    assert "Clone ready" not in session.out.getvalue()
+    assert session.consumed == 0
+    assert not (Session.state / "log.jsonl").exists()  # no session was started
+
+
+def test_the_chat_starts_without_policy_or_contacts_files(tmp_path: Path) -> None:
+    data = data_with(tmp_path)
+    (data / "policy.toml").unlink()
+    (data / "contacts.toml").unlink()
+    session = Session("/quit")
+
+    assert session.run(data=data) == 0
+    assert "Clone ready" in session.out.getvalue()

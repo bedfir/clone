@@ -1,0 +1,19 @@
+# The people the clone may write to, and the category of each.
+# The category decides what the policy does (see policy.toml); it always comes from this
+# file, never from the clone. A name that is not listed is an unknown recipient, and a
+# message to an unknown recipient is always forbidden.
+#
+# Names must match exactly (case and surrounding spaces are ignored, nothing else): a near
+# match is a different person. All the people here are fictional.
+
+[[contact]]
+name = "Julien Martin"
+category = "colleague"
+
+[[contact]]
+name = "Sophie Bernard"
+category = "manager"
+
+[[contact]]
+name = "Atelier Roche Pièces"
+category = "supplier"

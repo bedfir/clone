@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ import pytest
 from clone import actionlog
 from clone.actionlog import GENESIS_HASH, ActionLog, ActionLogError, format_timestamp
 
-START = datetime(2026, 10, 18, 13, 40, 12, 123456, tzinfo=timezone.utc)
+START = datetime(2026, 10, 18, 13, 40, 12, 123456, tzinfo=UTC)
 TIMESTAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z")
 
 

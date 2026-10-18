@@ -1,0 +1,21 @@
+# What the clone may do in your name, by type of action and category of recipient
+# (categories come from contacts.toml). Decisions:
+#
+#   approve  the clone prepares it and waits for you: nothing leaves without your say
+#   forbid   the clone refuses it
+#
+# "allow" (do it without asking) does NOT exist yet for outgoing messages, and a policy that
+# uses it is refused when the chat starts. A message is free text: one classified as a
+# friendly note could just as well be an order, and it must not leave unseen. "allow" will
+# come with a separate, narrow type of action that cannot carry a commitment.
+#
+# Built in, not configurable: a recipient who is not in contacts.toml is always forbidden.
+# Without this file, or for a category not listed here, the decision is "approve".
+
+[outgoing_message]
+default = "approve"
+
+[outgoing_message.categories]
+colleague = "approve"
+manager = "approve"
+supplier = "forbid"   # orders and money go through you, not through the clone

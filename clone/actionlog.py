@@ -18,7 +18,7 @@ import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -109,7 +109,7 @@ def hash_line(line: bytes) -> str:
 
 def format_timestamp(moment: datetime) -> str:
     """RFC 3339, UTC, millisecond precision, e.g. 2026-10-18T13:40:12.123Z."""
-    moment = moment.astimezone(timezone.utc)
+    moment = moment.astimezone(UTC)
     return moment.strftime("%Y-%m-%dT%H:%M:%S") + f".{moment.microsecond // 1000:03d}Z"
 
 
@@ -180,7 +180,7 @@ class ActionLog:
     ) -> None:
         self.state_dir = Path(state_dir)
         self.path = self.state_dir / LOG_FILE
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._new_id = new_id or (lambda: uuid.uuid4().hex)
 
     def append(self, type: str, payload: dict[str, Any] | None = None) -> Entry:

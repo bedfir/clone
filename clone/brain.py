@@ -10,9 +10,12 @@ import os
 from collections.abc import Sequence
 
 from clone.actionlog import ActionLog
+from clone.engagement import Engagement
 from clone.memory import Chunk, Retriever
 from clone.model import Message, ModelClient
 from clone.personality import Personality
+from clone.policy import Decision
+from clone.proposals import OutgoingMessage
 
 DEFAULT_MAX_TURNS = 10
 MAX_TURNS_ENV_VAR = "CLONE_MAX_TURNS"
@@ -120,6 +123,7 @@ class Brain:
         max_turns: int = DEFAULT_MAX_TURNS,
         retrieval_limit: int = DEFAULT_RETRIEVAL_LIMIT,
         log: ActionLog | None = None,
+        engagement: Engagement | None = None,
     ) -> None:
         if max_turns < 1:
             raise ValueError("max_turns must be at least 1")
@@ -129,6 +133,7 @@ class Brain:
         self.max_turns = max_turns
         self.retrieval_limit = retrieval_limit
         self.log = log
+        self.engagement = engagement
         self._history: list[Message] = []
         self._previous_question = ""
         self._last_sources: list[Chunk] = []
@@ -142,6 +147,12 @@ class Brain:
         """
         if self.log is not None:
             self.log.append("session.started", {"model": self.model.model, "chunks": chunk_count})
+
+    def propose(self, proposal: OutgoingMessage) -> Decision:
+        """Hand a proposal to the engagement gate, which decides. The brain never acts itself."""
+        if self.engagement is None:
+            raise RuntimeError("This brain has no engagement gate: it cannot propose anything.")
+        return self.engagement.submit(proposal)
 
     @property
     def last_sources(self) -> list[Chunk]:

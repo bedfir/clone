@@ -72,6 +72,11 @@ clone/
 │   ├── personality.py   # personality loading
 │   ├── model.py         # model client (only module importing the SDK)
 │   ├── actionlog.py     # append-only, hash-chained action log (imports nothing from the package)
+│   ├── proposals.py     # typed proposals (OutgoingMessage): what the brain asks for
+│   ├── contacts.py      # data/contacts.toml: name -> category, exact lookup
+│   ├── policy.py        # data/policy.toml: pure decisions, strict loading
+│   ├── engagement.py    # the gate: submit() decides and logs, release() writes the outbox
+│   ├── tomlfile.py      # reads a TOML file with readable errors (used by contacts and policy)
 │   ├── brain.py         # orchestration
 │   └── interfaces/
 │       └── cli.py       # terminal adapter
@@ -90,13 +95,15 @@ clone/
 └── pyproject.toml
 ```
 
-Dependency direction: `interfaces → brain → (memory, personality, model, actionlog)`. Lower layers never import higher ones.
+Dependency direction: `interfaces → brain → (memory, personality, model, engagement)` and `engagement → (policy, contacts, proposals, actionlog)`. Lower layers never import higher ones.
 
 ## Data format
 
 `data/` (and `example/`) contains:
 - `personality.md`: free Markdown describing who the user is, their style, values and red lines.
 - `notes/`: any number of Markdown files, nested folders allowed. Each heading starts a new memory chunk; a chunk keeps its source file and heading for traceability.
+- `contacts.toml` (optional): the people the clone may write to, with a category each. See "Engagement policy".
+- `policy.toml` (optional): what the clone may do, by type of action and recipient category. See "Engagement policy".
 
 ## Action log
 
@@ -124,6 +131,51 @@ The action log is the owner's record of what the clone did in their name (ADR-00
 **What it cannot detect on its own:** changing or deleting the **last** entry, or the last few, because no later entry refers to their hash. The head hash printed by `clone log verify` (the first 12 hex characters of the last line's hash) is what closes this gap: an owner who notes it elsewhere can see that the tail changed. Signing the head with an owner-held key is planned for Phase 3 (ADR-008). Until then the log shows tampering in the middle of the history, and tail changes only to someone who kept the head.
 
 **Platform:** `fcntl` locking means POSIX systems (Linux, macOS, the Docker containers used here).
+
+## Engagement policy
+
+The brain proposes, the policy decides (ADR-006). The policy decides on facts the code controls (the type of the proposal and the category found in the contacts), never on anything the model says about a proposal. A proposal has no category field.
+
+**Modules.** `proposals.py` defines `OutgoingMessage(id, recipient, text)` (frozen; `id` is a uuid4 hex). `contacts.py` and `policy.py` load the two files below. `engagement.py` is the gate: `submit(proposal)` is the only way in, and `release(proposal_id, owner_approved=True)` is the only code that writes to `state/outbox/` (a test checks that no other module mentions it). Nothing is really sent: the outbox is a simulated channel. Pending proposals are held in memory for now.
+
+**`data/contacts.toml`** (missing file: no contacts, so every recipient is unknown):
+
+```toml
+[[contact]]
+name = "Julien Martin"
+category = "colleague"
+```
+
+Lookup is by exact name, trimmed and case-insensitive, nothing else: no fuzzy matching (a near match could reach the wrong person), no parsing of the recipient string. Categories are trimmed and lower-cased. Duplicate names, a missing name or category, and unknown keys are load errors.
+
+**`data/policy.toml`**:
+
+```toml
+[outgoing_message]
+default = "approve"
+
+[outgoing_message.categories]
+colleague = "approve"
+supplier = "forbid"
+```
+
+Loading is strict and fails closed: an unknown section, key or decision value is an error naming the file and the problem. `allow` is refused for outgoing messages, in `default` and in a category: a message is free text, and one classified as harmless could be an order, so nothing leaves without the owner's approval until a separate, narrow engagement type exists. A missing file, or a missing `default`, means `approve`. Policy and contacts are read when the chat starts (restart to apply a change); an error stops the chat before it begins.
+
+**Decision order** (`Policy.decide(proposal, category)`, pure; the first rule that applies wins):
+
+| # | Case | Outcome | Rule |
+|---|---|---|---|
+| 1 | Not an outgoing message (unsupported type) | forbid | `builtin.unknown_proposal_type` |
+| 2 | Recipient not in the contacts (category `None`) | forbid | `builtin.unknown_recipient` |
+| 3 | No policy file | approve | `builtin.no_policy_file` |
+| 4 | The recipient's category is listed | as listed | `outgoing_message.categories.<category>` |
+| 5 | Anything else | `default` (approve if absent) | `outgoing_message.default` |
+
+Rules 1 to 3 are built in and cannot be configured. The category in a rule string is the lower-cased one.
+
+**`submit`** logs one `policy.decided` entry per proposal, then holds it (`approve`) or refuses it (anything else: fail closed). The entry holds the proposal id, type, recipient, category (`null` if unknown), outcome, rule and `text_sha256`, the hash of the text, never the text. A decision that cannot be logged is not taken: no log entry, no decision. A proposal id can be submitted only once.
+
+**`release`** refuses without `owner_approved=True` (only the CLI will pass it, for the owner), and for an unknown, refused or already released proposal. It logs `proposal.released` (proposal id and file name) before writing `state/outbox/<id>.json`, which is marked `"simulated": true`; if the write fails it logs `proposal.release_failed` and the proposal stays pending. No log entry, no action.
 
 ## Architecture Decision Records
 
