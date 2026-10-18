@@ -68,6 +68,16 @@ Acceptance criteria:
 - [ ] A missing API key, a network or API error produce a readable message, never a stack trace.
 - [ ] README explains install, setup from `example/`, and usage.
 
+### S1-7 Stable excerpts across turns (bug from product owner testing)
+From the third question on, the clone retracted correct earlier answers: excerpts were replaced and renumbered every turn while the history kept answers citing the old numbers.
+
+Acceptance criteria:
+- [ ] Each turn's retrieved excerpts are attached to that user turn in the history, labelled as data.
+- [ ] Each chunk has a stable short ID derived from its source and heading path, used in citations and `/sources`.
+- [ ] The rules say earlier answers rest on earlier turns' excerpts and must not be retracted because those are not repeated.
+- [ ] Regression test: three turns retrieving different chunks; turn-1 excerpts are still sent at turn 3, IDs identical across turns.
+- [ ] Product owner re-runs questions 1, 3 and 9: no false self-correction.
+
 ### S1-6 Product owner validation
 - [ ] Write a real personality file and 5 to 10 personal notes in `data/`.
 - [ ] Ask 10 questions about yourself and rate each answer from 1 to 5.
@@ -83,20 +93,21 @@ Phase 1, continued (Sprint 2 candidates):
 5. Local API gateway on the internal network only
 6. Web / PWA interface, reachable from localhost only by default
 7. Streaming responses
+8. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
 
 Phase 2:
-8. First MCP tool, reachable only through the engagement policy
-9. OPC UA virtual factory simulator and its MCP server
+9. First MCP tool, reachable only through the engagement policy
+10. OPC UA virtual factory simulator and its MCP server
 
 Phase 3:
-10. Public memory store and isolated representative service (ADR-007)
-11. Approval queue between the representative and the owner
-12. Interlocutor profiles
-13. Signed outgoing messages (ADR-008)
+11. Public memory store and isolated representative service (ADR-007)
+12. Approval queue between the representative and the owner
+13. Interlocutor profiles
+14. Signed outgoing messages (ADR-008)
 
 Later:
-14. Remote access through a private VPN, as an explicit opt-in
-15. Agent-to-agent API with owner-verifiable identity
+15. Remote access through a private VPN, as an explicit opt-in
+16. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 
