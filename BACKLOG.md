@@ -94,7 +94,6 @@ Demo script (product owner, with the product owner's private persona):
 4. A draft to someone who is not in the contacts is refused.
 5. `clone log verify` confirms the log is intact; editing one line by hand makes it fail.
 
-Recommended model for Claude Code: Opus for S2-3 and S2-4, Sonnet for the others.
 
 ### S2-1 Writable state and container hardening
 As the owner, I want the clone's own state kept apart from my data, in a hardened container, so that it can record things without being able to change my notes (ADR-007, ADR-009).
@@ -120,8 +119,10 @@ As the owner, I want a rule to decide what the clone may do alone, what needs my
 
 Acceptance criteria:
 - [ ] Typed proposals (at least: outgoing message), each with a unique ID.
+- [ ] `data/contacts.toml` lists contacts with a name and a category (colleague, manager, supplier...); `example/` gets fictional ones. The recipient's category always comes from this file, never from the model.
 - [ ] A policy file `data/policy.toml` (read with the standard library) maps proposal types and recipient categories to `allow`, `approve` or `forbid`.
 - [ ] No policy file, or a case it does not cover: the decision is `approve`. A message to an unknown recipient is `forbid`.
+- [ ] No automatic sending: until the `engagement` type exists, an outgoing message can only be `approve` or `forbid`. A policy file that sets `allow` for outgoing messages is refused at load time with a clear error naming the rule, and the chat does not start. Reason: otherwise an order classified as a plain message could leave without approval.
 - [ ] Every decision is logged with the rule that produced it.
 - [ ] The policy is the only path from a proposal to an action; a test shows the outbox cannot be written without a policy decision.
 - [ ] `example/` gets a commented `policy.toml`.
@@ -130,7 +131,6 @@ Acceptance criteria:
 As the owner, I want to ask the clone to draft a message to a colleague and approve it before it goes, so that I see the representative's core loop working end to end.
 
 Acceptance criteria:
-- [ ] `data/contacts.toml` lists fictional contacts with a name and a category (colleague, manager, supplier...); `example/` gets one.
 - [ ] The model can propose a message through a tool (for example `draft_message(recipient, text)`); calling it creates a proposal, never a send.
 - [ ] The CLI shows each new proposal with its policy decision; `/pending`, `/approve <id>` and `/reject <id>` manage the queue.
 - [ ] Approved messages are written to `state/outbox/`, clearly marked as simulated, and logged; rejected ones are logged too.
@@ -156,25 +156,26 @@ Only if S2-1 to S2-5 are done: SQLite + embeddings behind the existing retrieval
 ## Next (priority order)
 
 Phase 1, continued:
-1. Vector search (SQLite + embeddings) behind the same retrieval interface
-2. Local API gateway on the internal network only
-3. Web / PWA interface, reachable from localhost only by default
-4. Streaming responses
-5. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
+1. `engagement` proposal type (orders, commitments, amounts), the prerequisite for any `allow` rule on outgoing messages. Constraints: the classification never rests on the model's own declaration alone (a type or an amount extracted by the model can be manipulated by prompt injection); deterministic checks in code decide, and the model can only make a case stricter, never looser; any doubt blocks (`approve` or `forbid`, never `allow`).
+2. Vector search (SQLite + embeddings) behind the same retrieval interface
+3. Local API gateway on the internal network only
+4. Web / PWA interface, reachable from localhost only by default
+5. Streaming responses
+6. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
 
 Phase 2:
-6. First MCP tool, reachable only through the engagement policy
-7. OPC UA virtual factory simulator and its MCP server
+7. First MCP tool, reachable only through the engagement policy
+8. OPC UA virtual factory simulator and its MCP server
 
 Phase 3:
-8. Public memory store and isolated representative service (ADR-007)
-9. Approval queue between the representative and the owner
-10. Interlocutor profiles
-11. Signed outgoing messages (ADR-008)
+9. Public memory store and isolated representative service (ADR-007)
+10. Approval queue between the representative and the owner
+11. Interlocutor profiles
+12. Signed outgoing messages (ADR-008)
 
 Later:
-12. Remote access through a private VPN, as an explicit opt-in
-13. Agent-to-agent API with owner-verifiable identity
+13. Remote access through a private VPN, as an explicit opt-in
+14. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 
