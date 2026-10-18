@@ -1,0 +1,15 @@
+services:
+  clone:
+    build:
+      context: .
+      # Development image for now (tests and ruff); the default Dockerfile target is runtime-only.
+      target: dev
+    image: clone:dev
+    volumes:
+      # Personal data stays on the host, read-only while the clone only reads memory (ADR-005).
+      - ./data:/app/data:ro
+    env_file:
+      - path: .env
+        required: false
+    stdin_open: true
+    tty: true

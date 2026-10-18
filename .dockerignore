@@ -1,0 +1,24 @@
+# Personal data and secrets must never enter an image (ADR-005).
+data/
+.env
+.env.*
+
+# Version control and local environments
+.git/
+.gitignore
+.venv/
+venv/
+
+# Caches and build output
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Docker files themselves
+Dockerfile
+compose.yaml
+.dockerignore
