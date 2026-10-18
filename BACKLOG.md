@@ -122,6 +122,7 @@ Acceptance criteria:
 - [ ] Typed proposals (at least: outgoing message), each with a unique ID.
 - [ ] A policy file `data/policy.toml` (read with the standard library) maps proposal types and recipient categories to `allow`, `approve` or `forbid`.
 - [ ] No policy file, or a case it does not cover: the decision is `approve`. A message to an unknown recipient is `forbid`.
+- [ ] No automatic sending: until the `engagement` type exists, an outgoing message can only be `approve` or `forbid`. A policy file that sets `allow` for outgoing messages is refused at load time with a clear error naming the rule, and the chat does not start. Reason: otherwise an order classified as a plain message could leave without approval.
 - [ ] Every decision is logged with the rule that produced it.
 - [ ] The policy is the only path from a proposal to an action; a test shows the outbox cannot be written without a policy decision.
 - [ ] `example/` gets a commented `policy.toml`.
@@ -156,25 +157,26 @@ Only if S2-1 to S2-5 are done: SQLite + embeddings behind the existing retrieval
 ## Next (priority order)
 
 Phase 1, continued:
-1. Vector search (SQLite + embeddings) behind the same retrieval interface
-2. Local API gateway on the internal network only
-3. Web / PWA interface, reachable from localhost only by default
-4. Streaming responses
-5. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
+1. `engagement` proposal type (orders, commitments, amounts), the prerequisite for any `allow` rule on outgoing messages. Constraints: the classification never rests on the model's own declaration alone (a type or an amount extracted by the model can be manipulated by prompt injection); deterministic checks in code decide, and the model can only make a case stricter, never looser; any doubt blocks (`approve` or `forbid`, never `allow`).
+2. Vector search (SQLite + embeddings) behind the same retrieval interface
+3. Local API gateway on the internal network only
+4. Web / PWA interface, reachable from localhost only by default
+5. Streaming responses
+6. Do not resend an excerpt already attached to an earlier turn of the session; refer to it by ID (keeps the history small)
 
 Phase 2:
-6. First MCP tool, reachable only through the engagement policy
-7. OPC UA virtual factory simulator and its MCP server
+7. First MCP tool, reachable only through the engagement policy
+8. OPC UA virtual factory simulator and its MCP server
 
 Phase 3:
-8. Public memory store and isolated representative service (ADR-007)
-9. Approval queue between the representative and the owner
-10. Interlocutor profiles
-11. Signed outgoing messages (ADR-008)
+9. Public memory store and isolated representative service (ADR-007)
+10. Approval queue between the representative and the owner
+11. Interlocutor profiles
+12. Signed outgoing messages (ADR-008)
 
 Later:
-12. Remote access through a private VPN, as an explicit opt-in
-13. Agent-to-agent API with owner-verifiable identity
+13. Remote access through a private VPN, as an explicit opt-in
+14. Agent-to-agent API with owner-verifiable identity
 
 ## Ideas
 
