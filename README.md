@@ -117,7 +117,7 @@ clone log -n 50         # the last 50
 clone log verify        # check the whole chain
 ```
 
-`clone log verify` prints `OK: <n> entries, head <12 hex>`, or `Broken at entry <k> (id <short id>): <reason>` and exits with an error. Note the head hash somewhere safe: changes to the very last entries cannot be detected by the chain alone, but they change the head. With Docker: `docker compose run --rm clone clone log verify`. The format is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#action-log).
+`clone log verify` prints `OK: <n> entries, head <12 hex>`. If something was changed it exits with an error and says where, for example `Broken between entries 2 and 3 (ids ...): entry 3 does not match entry 2 as it is now. Entry 2 was modified, or entries were removed or reordered.` Note the head hash somewhere safe: changes to the very last entries cannot be detected by the chain alone, but they change the head. With Docker: `docker compose run --rm clone clone log verify`. The format is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#action-log).
 
 ### Your data
 

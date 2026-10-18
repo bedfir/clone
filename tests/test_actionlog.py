@@ -19,10 +19,15 @@ START = datetime(2026, 10, 18, 13, 40, 12, 123456, tzinfo=timezone.utc)
 TIMESTAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z")
 
 
+def entry_id(n: int) -> str:
+    """The fake ID of the n-th entry: distinct in its first 8 characters, like short IDs."""
+    return f"{n:08x}" + "0" * 24
+
+
 def make_log(tmp_path: Path) -> ActionLog:
     """A log with a fake clock (one second per entry) and predictable IDs."""
     moments = iter(START + timedelta(seconds=n) for n in range(10_000))
-    ids = iter(f"{n:032x}" for n in range(1, 10_000))
+    ids = iter(entry_id(n) for n in range(1, 10_000))
     return ActionLog(tmp_path, clock=lambda: next(moments), new_id=lambda: next(ids))
 
 
@@ -53,14 +58,14 @@ def test_entry_has_id_utc_timestamp_type_payload_and_prev(tmp_path: Path) -> Non
 
     entry = log.append("session.started", {"model": "m", "chunks": 3})
 
-    assert entry.id == f"{1:032x}"
+    assert entry.id == entry_id(1)
     assert entry.ts == "2026-10-18T13:40:12.123Z"
     assert (entry.type, entry.payload, entry.prev) == (
         "session.started",
         {"model": "m", "chunks": 3},
         GENESIS_HASH,
     )
-    assert entry.short_id == "00000000"
+    assert entry.short_id == "00000001"
 
 
 def test_line_is_compact_sorted_utf8_json_ending_with_a_newline(tmp_path: Path) -> None:
@@ -70,7 +75,7 @@ def test_line_is_compact_sorted_utf8_json_ending_with_a_newline(tmp_path: Path) 
 
     raw = log.path.read_bytes()
     assert raw == (
-        b'{"id":"00000000000000000000000000000001","payload":{"a":"Montr\xc3\xa9al","b":1},'
+        b'{"id":"00000001000000000000000000000000","payload":{"a":"Montr\xc3\xa9al","b":1},'
         b'"prev":"' + GENESIS_HASH.encode() + b'","ts":"2026-10-18T13:40:12.123Z",'
         b'"type":"test.event"}\n'
     )
@@ -270,7 +275,7 @@ def test_a_missing_field_is_reported_with_the_entry_id(tmp_path: Path, field: st
     result = log.verify()
 
     assert (result.ok, result.broken_at, result.reason) == (False, 4, f"missing field {field!r}")
-    assert result.broken_id == (None if field == "id" else f"{4:032x}")
+    assert result.broken_id == (None if field == "id" else entry_id(4))
 
 
 def test_a_field_of_the_wrong_type_is_reported(tmp_path: Path) -> None:
@@ -303,6 +308,77 @@ def test_a_torn_last_line_stays_visible_after_the_next_append(tmp_path: Path) ->
     assert len(lines) == 4 and lines[2] == b'{"id":"abc'
     assert json.loads(lines[3])["prev"] == sha(lines[2])
     assert broken(log) == (3, "invalid JSON")
+
+
+# --- how a break is described to the owner ---------------------------------------------------
+
+
+def test_an_edited_entry_is_reported_as_a_break_between_it_and_the_next(tmp_path: Path) -> None:
+    log = filled(tmp_path)
+    lines = read_lines(log)
+    lines[1] = lines[1].replace(b'"n":1', b'"n":99')
+    write_lines(log, lines)
+
+    result = log.verify()
+
+    assert (result.kind, result.broken_at) == ("link", 3)
+    assert (result.previous_id, result.broken_id) == (entry_id(2), entry_id(3))
+    assert result.problem == (
+        "Broken between entries 2 and 3 (ids 00000002 and 00000003): entry 3 does not match "
+        "entry 2 as it is now. Entry 2 was modified, or entries were removed or reordered."
+    )
+
+
+def test_a_removed_middle_entry_names_the_two_entries_around_the_gap(tmp_path: Path) -> None:
+    log = filled(tmp_path)
+    lines = read_lines(log)
+    write_lines(log, lines[:2] + lines[3:])
+
+    problem = log.verify().problem
+
+    assert problem is not None
+    assert problem.startswith("Broken between entries 2 and 3 (ids 00000002 and 00000004): ")
+
+
+def test_swapped_entries_are_reported_as_a_break_between_the_neighbours(tmp_path: Path) -> None:
+    log = filled(tmp_path)
+    lines = read_lines(log)
+    lines[1], lines[2] = lines[2], lines[1]
+    write_lines(log, lines)
+
+    problem = log.verify().problem
+
+    assert problem is not None
+    assert problem.startswith("Broken between entries 1 and 2 (ids 00000001 and 00000003): ")
+
+
+def test_a_first_entry_that_does_not_start_the_chain_has_its_own_message(tmp_path: Path) -> None:
+    log = filled(tmp_path)
+    write_lines(log, read_lines(log)[1:])
+
+    result = log.verify()
+
+    assert result.kind == "start"
+    assert result.problem == (
+        "Broken at entry 1 (id 00000002): the first entry does not start the chain. "
+        "Entries before it were removed, or it was modified."
+    )
+
+
+def test_an_unreadable_entry_keeps_the_single_entry_message(tmp_path: Path) -> None:
+    log = filled(tmp_path)
+    lines = read_lines(log)
+    lines[2] = b"{oops"
+    write_lines(log, lines)
+    assert log.verify().problem == "Broken at entry 3 (id unknown): invalid JSON"
+
+    lines[2] = json.dumps({"id": entry_id(3)}).encode()
+    write_lines(log, lines)
+    assert log.verify().problem == ("Broken at entry 3 (id 00000003): missing field 'ts'")
+
+
+def test_a_valid_chain_has_no_problem(tmp_path: Path) -> None:
+    assert filled(tmp_path).verify().problem is None
 
 
 # --- documented limits: the tail of the chain ------------------------------------------------
@@ -391,7 +467,34 @@ def test_a_non_writable_state_folder_is_a_clear_error(tmp_path: Path) -> None:
 
     message = str(error.value)
     assert str(folder) in message and "Cannot write" in message
-    assert "uid 1000" in message
+    assert "uid 1000" in message and f"chown 1000 {folder}" in message
+    assert "owned by root" not in message and "sudo" not in message
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_a_root_owned_state_folder_gets_the_sudo_advice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Docker creates a missing bind folder as root; chown would need sudo, so say so."""
+    folder = tmp_path / "state"
+    folder.mkdir()
+    folder.chmod(0o555)
+    monkeypatch.setattr(actionlog, "_owned_by_root", lambda path: True)
+    try:
+        with pytest.raises(ActionLogError) as error:
+            ActionLog(folder).append("test.event")
+    finally:
+        folder.chmod(0o755)
+
+    message = str(error.value)
+    assert "owned by root" in message
+    assert "sudo rm -r state && mkdir state" in message
+    assert "chown" not in message
+
+
+def test_ownership_is_read_from_the_folder(tmp_path: Path) -> None:
+    assert actionlog._owned_by_root(tmp_path) == (tmp_path.stat().st_uid == 0)
+    assert not actionlog._owned_by_root(tmp_path / "nowhere")
 
 
 # --- concurrency and layering --------------------------------------------------------------

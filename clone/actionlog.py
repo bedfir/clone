@@ -52,14 +52,47 @@ class Entry:
 
 @dataclass(frozen=True)
 class Verification:
-    """Result of checking the whole chain."""
+    """Result of checking the whole chain.
+
+    A break is of one of three kinds. "line": an entry that cannot be read (invalid JSON,
+    missing field). "link": an entry whose `prev` does not match the entry before it as it
+    is now; the culprit may be either of the two, so both are named. "start": the first
+    entry does not start the chain.
+    """
 
     ok: bool
     entries: int  # entries checked before the first problem, or all of them if ok
     head: str  # SHA-256 of the last line checked; the owner can note it
-    broken_at: int | None = None  # 1-based position of the first broken entry
+    broken_at: int | None = None  # 1-based position of the entry where the check failed
     broken_id: str | None = None
-    reason: str | None = None
+    previous_id: str | None = None  # the entry before it, for a "link" break
+    kind: str | None = None  # "line", "link" or "start"
+    reason: str | None = None  # technical detail
+
+    @property
+    def problem(self) -> str | None:
+        """The break described for a human, or None if the chain is valid."""
+        if self.ok or self.broken_at is None:
+            return None
+        here = _short(self.broken_id)
+        if self.kind == "link":
+            before = self.broken_at - 1
+            return (
+                f"Broken between entries {before} and {self.broken_at} "
+                f"(ids {_short(self.previous_id)} and {here}): entry {self.broken_at} does not "
+                f"match entry {before} as it is now. Entry {before} was modified, or entries "
+                "were removed or reordered."
+            )
+        if self.kind == "start":
+            return (
+                f"Broken at entry {self.broken_at} (id {here}): the first entry does not start "
+                "the chain. Entries before it were removed, or it was modified."
+            )
+        return f"Broken at entry {self.broken_at} (id {here}): {self.reason}"
+
+
+def _short(entry_id: str | None) -> str:
+    return entry_id[:SHORT_ID_LENGTH] if entry_id else "unknown"
 
 
 class _InvalidLine(Exception):
@@ -78,6 +111,13 @@ def format_timestamp(moment: datetime) -> str:
     """RFC 3339, UTC, millisecond precision, e.g. 2026-10-18T13:40:12.123Z."""
     moment = moment.astimezone(timezone.utc)
     return moment.strftime("%Y-%m-%dT%H:%M:%S") + f".{moment.microsecond // 1000:03d}Z"
+
+
+def _owned_by_root(path: Path) -> bool:
+    try:
+        return path.stat().st_uid == 0
+    except OSError:
+        return False
 
 
 def _encode(entry: dict[str, Any]) -> bytes:
@@ -183,12 +223,23 @@ class ActionLog:
                 file.flush()
                 os.fsync(file.fileno())
         except OSError as error:
-            raise ActionLogError(
-                f"Cannot write to the state folder {self.state_dir}: {error.strerror or error}. "
-                "Make it writable by the clone, which runs as uid 1000 "
-                f"(for example: chown 1000 {self.state_dir})."
-            ) from error
+            raise ActionLogError(self._not_writable_message(error)) from error
         return entry
+
+    def _not_writable_message(self, error: OSError) -> str:
+        message = f"Cannot write to the state folder {self.state_dir}: {error.strerror or error}."
+        if _owned_by_root(self.state_dir):
+            # Typical when Docker created the folder because it did not exist: chown would
+            # need sudo, and a folder of the owner's own is the simplest fix.
+            return (
+                f"{message} It is owned by root, probably created by Docker because it did not "
+                "exist. Replace it with a folder of your own (on the host): "
+                "sudo rm -r state && mkdir state"
+            )
+        return (
+            f"{message} Make it writable by the clone, which runs as uid 1000 "
+            f"(for example: chown 1000 {self.state_dir})."
+        )
 
     def recent(self, count: int) -> list[tuple[int, Entry | None]]:
         """The last `count` lines as (1-based position, entry); None for an unreadable line."""
@@ -209,18 +260,34 @@ class ActionLog:
         last entry cannot be detected by the chain alone (see docs/ARCHITECTURE.md).
         """
         expected = GENESIS_HASH
+        previous: Entry | None = None
         lines = self._lines()
         for position, line in enumerate(lines, 1):
             try:
                 entry = _parse(line)
             except _InvalidLine as problem:
                 return Verification(
-                    False, position - 1, expected, position, problem.entry_id, problem.reason
+                    False,
+                    position - 1,
+                    expected,
+                    position,
+                    problem.entry_id,
+                    kind="line",
+                    reason=problem.reason,
                 )
             if entry.prev != expected:
-                reason = f"prev mismatch (expected {expected[:12]}, found {entry.prev[:12]})"
-                return Verification(False, position - 1, expected, position, entry.id, reason)
+                return Verification(
+                    False,
+                    position - 1,
+                    expected,
+                    position,
+                    entry.id,
+                    previous.id if previous else None,
+                    "link" if previous else "start",
+                    f"prev mismatch (expected {expected[:12]}, found {entry.prev[:12]})",
+                )
             expected = hash_line(line)
+            previous = entry
         return Verification(True, len(lines), expected)
 
     def _lines(self) -> list[bytes]:

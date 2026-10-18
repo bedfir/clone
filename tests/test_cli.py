@@ -498,13 +498,18 @@ def test_clone_log_verify_fails_when_a_line_was_edited(
     lines = log.path.read_bytes().splitlines()
     lines[1] = lines[1].replace(b'"n":1', b'"n":9')
     log.path.write_bytes(b"\n".join(lines) + b"\n")
-    third_id = json.loads(lines[2])["id"][:8]
+    second_id, third_id = (json.loads(lines[n])["id"][:8] for n in (1, 2))
 
     code = cli.main(["log", "verify", "--state", str(Session.state)])
 
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err.startswith(f"Broken at entry 3 (id {third_id}): prev mismatch")
+    assert captured.err == (
+        f"Broken between entries 2 and 3 (ids {second_id} and {third_id}): entry 3 does not "
+        "match entry 2 as it is now. Entry 2 was modified, or entries were removed or "
+        "reordered.\n"
+    )
+    assert captured.out == ""
     assert NO_TRACE not in captured.err
 
 

@@ -194,8 +194,7 @@ def run_log(
         if result.ok:
             print(f"OK: {result.entries} entries, head {result.head[:12]}", file=out)
             return 0
-        short = result.broken_id[:8] if result.broken_id else "unknown"
-        print(f"Broken at entry {result.broken_at} (id {short}): {result.reason}", file=err)
+        print(result.problem, file=err)
         return 1
 
     if not entries:
