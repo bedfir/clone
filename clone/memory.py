@@ -6,6 +6,7 @@ Sprint 1 can be replaced by vector search without touching the brain.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from collections import Counter
@@ -16,6 +17,7 @@ from typing import Protocol
 
 NOTES_DIR = "notes"
 HEADING_BOOST = 2
+ID_LENGTH = 8
 
 _HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _FENCES = ("```", "~~~")
@@ -71,6 +73,19 @@ class Chunk:
     text: str
     source: str  # path of the note relative to the data folder, with "/" separators
     heading: str  # full path such as "Projects > Line 3 retrofit"; empty before any heading
+    occurrence: int = 0  # 0 for the first chunk with this source and heading, then 1, 2...
+
+    @property
+    def id(self) -> str:
+        """A short ID, stable across turns and reloads, derived from source and heading path.
+
+        Identical for the same note section as long as the note's path and the section's
+        heading path do not change, so citations keep their meaning during a conversation.
+        """
+        key = f"{self.source}\n{self.heading}"
+        if self.occurrence:
+            key += f"\n{self.occurrence}"
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()[:ID_LENGTH]
 
     @property
     def label(self) -> str:
@@ -93,6 +108,7 @@ def split_chunks(text: str, source: str) -> list[Chunk]:
     of its parents. Sections without any text of their own are dropped.
     """
     chunks: list[Chunk] = []
+    seen: Counter[str] = Counter()  # chunks per heading path, to tell duplicates apart
     parents: list[tuple[int, str]] = []  # (level, title) of the enclosing headings
     lines: list[str] = []
     in_fence = False
@@ -101,7 +117,10 @@ def split_chunks(text: str, source: str) -> list[Chunk]:
         body = "\n".join(lines).strip()
         if body:
             heading = HEADING_SEPARATOR.join(title for _, title in parents)
-            chunks.append(Chunk(text=body, source=source, heading=heading))
+            chunks.append(
+                Chunk(text=body, source=source, heading=heading, occurrence=seen[heading])
+            )
+            seen[heading] += 1
 
     for line in text.splitlines():
         if line.lstrip().startswith(_FENCES):

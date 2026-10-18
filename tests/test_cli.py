@@ -8,6 +8,7 @@ import pytest
 from fakes import FakeModel
 
 from clone.interfaces import cli
+from clone.memory import Memory
 from clone.model import AnthropicClient, Message, ModelError
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "example"
@@ -114,7 +115,7 @@ def test_a_question_is_answered_from_memory() -> None:
     session.run(model=model)
 
     assert "You have two projects." in session.out.getvalue()
-    assert "Projects > Line 3 retrofit" in model.calls[0][0]
+    assert "Projects > Line 3 retrofit" in model.calls[0][1][0].content
 
 
 def test_blank_lines_are_ignored() -> None:
@@ -140,14 +141,15 @@ def test_quit_stops_the_loop() -> None:
     assert session.consumed == 1
 
 
-def test_sources_lists_numbered_sources_of_the_last_answer() -> None:
+def test_sources_lists_the_stable_ids_of_the_last_answer() -> None:
     session = Session("What are my projects at work?", "/sources", "/quit")
 
     session.run()
 
     out = session.out.getvalue()
-    assert "[1] notes/work/projects.md | Projects > Line 3 retrofit" in out
-    assert "[2] notes/work/projects.md | Projects > OPC UA pilot" in out
+    chunks = Memory.load(EXAMPLE).search("What are my projects at work?", 2)
+    assert f"[{chunks[0].id}] notes/work/projects.md | Projects > Line 3 retrofit" in out
+    assert f"[{chunks[1].id}] notes/work/projects.md | Projects > OPC UA pilot" in out
 
 
 def test_sources_before_any_question_says_there_are_none() -> None:
@@ -195,7 +197,7 @@ def test_failed_reload_keeps_the_previous_memory(tmp_path: Path) -> None:
 
     assert "cp -r example data" in session.err.getvalue()
     assert "Keeping the previous memory" in session.out.getvalue()
-    assert "alpha" in model.calls[0][0]
+    assert "alpha" in model.calls[0][1][0].content
 
 
 def test_unknown_command_lists_the_commands() -> None:

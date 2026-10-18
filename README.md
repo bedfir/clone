@@ -82,7 +82,7 @@ ruff check && ruff format --check
 
 | Command | Effect |
 |---|---|
-| `/sources` | Show the sources of the last answer, numbered like the `[1]` citations in the answer |
+| `/sources` | Show the sources of the last answer, each with the short ID the answer cites, like `[a1b2c3d4]` |
 | `/reload` | Reload your notes and personality after editing them |
 | `/quit` | Leave (Ctrl-D works too) |
 

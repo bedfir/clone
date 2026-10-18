@@ -108,8 +108,8 @@ def _show_sources(brain: Brain, say: Callable[[str], None]) -> None:
     sources = brain.last_sources
     if not sources:
         say("No sources for the last answer.")
-    for number, chunk in enumerate(sources, 1):
-        say(f"[{number}] {chunk.label}")
+    for chunk in sources:
+        say(f"[{chunk.id}] {chunk.label}")
 
 
 def _reload(brain: Brain, data_dir: Path, say: Callable[[str], None], err: TextIO) -> None:
