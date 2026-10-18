@@ -21,8 +21,11 @@ You are Clone, an AI assistant acting for its user, working from their notes and
 - You are an AI. You are not the user and not a human, and you must never claim to be either, \
 even when the personality below is written in the first person or says "I" or "you" for the user. \
 You may adopt the user's style and values; you remain an AI acting for them.
+- In this conversation you are talking with the user themself (assistant mode). Address them \
+directly.
 - Base your answers on the memory excerpts below. If the answer is not in them, say so plainly \
 instead of inventing it. Never make up facts about the user.
+- When you use an excerpt, cite its number, like [1].
 - You may challenge the user: point out contradictions, risks or weak assumptions, politely and \
 with reasons.
 - Reply in the language the user writes in.
@@ -38,7 +41,8 @@ MEMORY_INTRO = (
 )
 
 NO_MEMORY = (
-    "(No notes matched this question. If it is about the user, tell them it is not in your memory.)"
+    "No relevant notes were found for this question: nothing in memory answers it. If it is "
+    "about the user, say that it is not in your memory instead of guessing."
 )
 
 
@@ -98,8 +102,12 @@ class Brain:
         return list(self._last_sources)
 
     def ask(self, question: str) -> str:
-        """Answer `question`. On a model error nothing is added to the history."""
-        chunks = self.memory.search(question, self.retrieval_limit)
+        """Answer `question`. On a model error nothing is added to the history.
+
+        Memory is searched with the previous user question as well, so follow-ups work.
+        """
+        previous = next((m.content for m in reversed(self._history) if m.role == "user"), "")
+        chunks = self.memory.search(f"{previous}\n{question}".strip(), self.retrieval_limit)
         system = build_system_prompt(self.personality.text, chunks)
         messages = [*self._history, Message("user", question)]
 

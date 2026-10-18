@@ -19,8 +19,11 @@ You are Clone, an AI assistant acting for its user, working from their notes and
 - You are an AI. You are not the user and not a human, and you must never claim to be either, \
 even when the personality below is written in the first person or says "I" or "you" for the user. \
 You may adopt the user's style and values; you remain an AI acting for them.
+- In this conversation you are talking with the user themself (assistant mode). Address them \
+directly.
 - Base your answers on the memory excerpts below. If the answer is not in them, say so plainly \
 instead of inventing it. Never make up facts about the user.
+- When you use an excerpt, cite its number, like [1].
 - You may challenge the user: point out contradictions, risks or weak assumptions, politely and \
 with reasons.
 - Reply in the language the user writes in.
@@ -96,6 +99,8 @@ def test_rules_say_the_clone_is_an_ai_and_must_not_invent() -> None:
     assert "never claim to be either" in rules
     assert "not in them, say so plainly instead of inventing it" in rules
     assert "challenge the user" in rules
+    assert "talking with the user themself (assistant mode). address them directly" in rules
+    assert "cite its number, like [1]" in rules
 
 
 @pytest.mark.parametrize(
@@ -123,10 +128,13 @@ def test_chunks_are_labelled_with_source_and_heading_path() -> None:
 
 
 def test_no_chunks_says_so_instead_of_leaving_the_section_empty() -> None:
-    prompt = build_system_prompt("p", [])
+    memory_section = build_system_prompt("p", []).split("=== MEMORY EXCERPTS ===\n")[1]
 
-    assert "No notes matched this question" in prompt
-    assert "--- [1]" not in prompt
+    assert memory_section.endswith(
+        "No relevant notes were found for this question: nothing in memory answers it. "
+        "If it is about the user, say that it is not in your memory instead of guessing."
+    )
+    assert "--- [1]" not in memory_section
 
 
 # --- the brain -----------------------------------------------------------------------------
@@ -151,7 +159,8 @@ def test_last_sources_are_the_chunks_of_the_last_answer() -> None:
     brain.ask("tea?")
     assert [c.heading for c in brain.last_sources] == ["Tea"]
 
-    brain.ask("something unrelated")
+    brain.ask("something unrelated")  # the previous question is still part of the search
+    brain.ask("another unrelated one")
     assert brain.last_sources == []
 
 
@@ -208,3 +217,66 @@ def test_memory_and_personality_can_be_replaced_for_a_reload() -> None:
     brain.ask("hello")
 
     assert "I am Robin." in model.calls[0][0]
+
+
+# --- follow-up questions -------------------------------------------------------------------
+
+
+class SpyRetriever:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def search(self, question: str, limit: int) -> list[Chunk]:
+        self.queries.append(question)
+        return []
+
+
+def test_search_uses_the_current_question_plus_the_previous_user_question() -> None:
+    spy = SpyRetriever()
+    brain = Brain(spy, Personality(text="p"), FakeModel())
+
+    brain.ask("first question")
+    brain.ask("and the second?")
+    brain.ask("third one")
+
+    assert spy.queries == [
+        "first question",
+        "first question\nand the second?",
+        "and the second?\nthird one",
+    ]
+
+
+def test_a_failed_question_is_not_used_as_context() -> None:
+    spy = SpyRetriever()
+    model = FakeModel()
+    brain = Brain(spy, Personality(text="p"), model)
+    brain.ask("kept")
+    model.error = ModelError("down")
+    with pytest.raises(ModelError):
+        brain.ask("lost")
+    model.error = None
+
+    brain.ask("next")
+
+    assert spy.queries[-1] == "kept\nnext"
+
+
+def test_a_follow_up_finds_the_chunk_of_the_previous_topic() -> None:
+    memory = Memory(
+        [
+            Chunk(text="Hotel du Nord, near the canal.", source="notes/paris.md", heading="Hotel"),
+            Chunk(text="Hotel Roma, near the station.", source="notes/rome.md", heading="Hotel"),
+            Chunk(text="Flights to Rome are booked.", source="notes/rome.md", heading="Flights"),
+        ]
+    )
+    # On its own, "the hotel?" matches Paris first (loading order); the context says Rome.
+    assert memory.search("What about the hotel?", 1)[0].source == "notes/paris.md"
+    model = FakeModel()
+    brain = Brain(memory, Personality(text="p"), model)
+
+    brain.ask("Tell me about my trip to Rome")
+    brain.ask("What about the hotel?")
+
+    system = model.calls[1][0]
+    assert system.index("Hotel Roma") < system.index("Hotel du Nord")
+    assert [c.source for c in brain.last_sources][0] == "notes/rome.md"

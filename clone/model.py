@@ -15,12 +15,32 @@ import anthropic
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 MODEL_ENV_VAR = "CLONE_MODEL"
+EFFORT_ENV_VAR = "CLONE_EFFORT"
+DEFAULT_EFFORT = "low"  # chat should feel responsive; raise it for harder questions
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# Room for thinking plus the answer. The API documentation advises against going lower
+# without a hard reason: a low cap can truncate the answer, and effort already limits spend.
 MAX_TOKENS = 16000
 
 
 def model_name() -> str:
     """The model to use: `CLONE_MODEL` if set and not blank, else the default."""
     return os.environ.get(MODEL_ENV_VAR, "").strip() or DEFAULT_MODEL
+
+
+def effort_name() -> str:
+    """The effort level: `CLONE_EFFORT` if set and not blank, else the default.
+
+    Raises ModelError if the value is not a known level.
+    """
+    value = os.environ.get(EFFORT_ENV_VAR, "").strip() or DEFAULT_EFFORT
+    return _check_effort(value, EFFORT_ENV_VAR)
+
+
+def _check_effort(effort: str, name: str = "effort") -> str:
+    if effort not in EFFORTS:
+        raise ModelError(f"Unknown {name} {effort!r}: use one of {', '.join(EFFORTS)}.")
+    return effort
 
 
 @dataclass(frozen=True)
@@ -53,8 +73,11 @@ class AnthropicClient:
     be injected for tests.
     """
 
-    def __init__(self, model: str | None = None, *, client: Any = None) -> None:
+    def __init__(
+        self, model: str | None = None, *, effort: str | None = None, client: Any = None
+    ) -> None:
         self.model = model or model_name()
+        self.effort = _check_effort(effort) if effort else effort_name()
         self._client = client
 
     def complete(self, system: str, messages: Sequence[Message]) -> str:
@@ -64,6 +87,7 @@ class AnthropicClient:
             response = self._client.messages.create(
                 model=self.model,
                 max_tokens=MAX_TOKENS,
+                output_config={"effort": self.effort},
                 system=system,
                 messages=[{"role": m.role, "content": m.content} for m in messages],
             )

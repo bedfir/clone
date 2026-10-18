@@ -6,7 +6,15 @@ from types import SimpleNamespace
 import pytest
 
 from clone import model
-from clone.model import DEFAULT_MODEL, AnthropicClient, Message, ModelError, model_name
+from clone.model import (
+    DEFAULT_EFFORT,
+    DEFAULT_MODEL,
+    AnthropicClient,
+    Message,
+    ModelError,
+    effort_name,
+    model_name,
+)
 
 PACKAGE = Path(model.__file__).resolve().parent
 
@@ -64,6 +72,48 @@ def test_an_explicit_model_wins_over_the_environment(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("CLONE_MODEL", "from-env")
 
     assert AnthropicClient("explicit").model == "explicit"
+
+
+# --- effort --------------------------------------------------------------------------------
+
+
+def test_default_effort_is_low(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLONE_EFFORT", raising=False)
+
+    assert DEFAULT_EFFORT == "low"
+    assert effort_name() == "low"
+
+
+def test_clone_effort_overrides_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLONE_EFFORT", "medium")
+
+    assert AnthropicClient("m").effort == "medium"
+
+
+def test_blank_clone_effort_falls_back_to_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLONE_EFFORT", " ")
+
+    assert effort_name() == "low"
+
+
+@pytest.mark.parametrize("bad", ["fast", "LOW", "0"])
+def test_unknown_effort_is_a_readable_error(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
+    monkeypatch.setenv("CLONE_EFFORT", bad)
+
+    with pytest.raises(ModelError, match="Unknown CLONE_EFFORT"):
+        AnthropicClient("m")
+    with pytest.raises(ModelError, match="Unknown effort"):
+        AnthropicClient("m", effort=bad)
+
+
+def test_effort_is_sent_as_output_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLONE_EFFORT", raising=False)
+    sdk = FakeSdk(sdk_response(text("ok")))
+
+    AnthropicClient("m", client=sdk).complete("s", [Message("user", "q")])
+    AnthropicClient("m", effort="high", client=sdk).complete("s", [Message("user", "q")])
+
+    assert [call["output_config"] for call in sdk.calls] == [{"effort": "low"}, {"effort": "high"}]
 
 
 # --- the SDK boundary ----------------------------------------------------------------------
