@@ -6,11 +6,24 @@ services:
       target: dev
     image: clone:dev
     volumes:
+      # Long syntax with create_host_path: false asks Docker not to create a missing folder (it
+      # would be owned by root, unusable by uid 1000). Engines that honor it stop with a clear
+      # error; Docker Desktop with WSL creates it anyway, so create both folders first.
+      #
       # The owner's data stays on the host, read-only: the clone never writes there (ADR-005).
-      - ./data:/app/data:ro
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+        bind:
+          create_host_path: false
       # The clone's own state (action log, pending proposals, ...): writable, apart from data/
       # (ADR-009). Create it before the first run: mkdir state
-      - ./state:/app/state
+      - type: bind
+        source: ./state
+        target: /app/state
+        bind:
+          create_host_path: false
     env_file:
       - path: .env
         required: false

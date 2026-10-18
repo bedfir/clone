@@ -52,11 +52,100 @@ def test_gitignore_keeps_private_folders_and_secrets_out_of_git() -> None:
 # --- data/ is the owner's, state/ is the clone's ---------------------------------------------
 
 
-def test_data_is_mounted_read_only_and_state_is_writable() -> None:
+def indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def volume_entry(text: str, target: str) -> str:
+    """The long-syntax volume entry mounted at `target`, or "" if there is none."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if re.match(r"^\s*volumes\s*:", line)), None)
+    if start is None:
+        return ""
+    entries: list[list[str]] = []
+    for line in lines[start + 1 :]:
+        if indent(line) <= indent(lines[start]):
+            break
+        if re.match(r"^\s*-\s+type\s*:", line):
+            entries.append([])
+        if entries:
+            entries[-1].append(line)
+    for entry in map("\n".join, entries):
+        if re.search(rf"^\s*(-\s+)?target\s*:\s*{re.escape(target)}\s*$", entry, re.MULTILINE):
+            return entry
+    return ""
+
+
+def has_setting(entry: str, setting: str) -> bool:
+    return re.search(rf"^\s*(-\s+)?{setting}\s*$", entry, re.MULTILINE) is not None
+
+
+def not_auto_created(entry: str) -> bool:
+    """A missing host folder must stop the start, not be created (as root) by Docker."""
+    return bool(entry) and has_setting(entry, "create_host_path: false")
+
+
+def data_mount_ok(text: str) -> bool:
+    entry = volume_entry(text, "/app/data")
+    return (
+        not_auto_created(entry)
+        and has_setting(entry, "source: ./data")
+        and has_setting(entry, "read_only: true")
+    )
+
+
+def state_mount_ok(text: str) -> bool:
+    entry = volume_entry(text, "/app/state")
+    return (
+        not_auto_created(entry)
+        and has_setting(entry, "source: ./state")
+        and not has_setting(entry, "read_only: true")
+    )
+
+
+def test_data_is_read_only_state_is_writable_and_neither_is_auto_created() -> None:
     compose = active_text("compose.yaml")
 
-    assert re.search(r"^\s*-\s*\./data:/app/data:ro\s*$", compose, re.MULTILINE)
-    assert re.search(r"^\s*-\s*\./state:/app/state\s*$", compose, re.MULTILINE)
+    assert data_mount_ok(compose)
+    assert state_mount_ok(compose)
+
+
+SAMPLE_MOUNTS = """\
+services:
+  clone:
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./state
+        target: /app/state
+        bind:
+          create_host_path: false
+    stdin_open: true
+"""
+
+
+def test_the_mount_checks_detect_each_violation() -> None:
+    assert data_mount_ok(SAMPLE_MOUNTS) and state_mount_ok(SAMPLE_MOUNTS)
+
+    writable_data = SAMPLE_MOUNTS.replace("        read_only: true\n", "")
+    assert not data_mount_ok(writable_data)
+    read_only_state = SAMPLE_MOUNTS.replace(
+        "        target: /app/state\n", "        target: /app/state\n        read_only: true\n"
+    )
+    assert not state_mount_ok(read_only_state)
+    auto_created = SAMPLE_MOUNTS.replace("create_host_path: false", "create_host_path: true")
+    assert not data_mount_ok(auto_created) and not state_mount_ok(auto_created)
+    default_behaviour = SAMPLE_MOUNTS.replace(
+        "        bind:\n          create_host_path: false\n", ""
+    )
+    assert not data_mount_ok(default_behaviour) and not state_mount_ok(default_behaviour)
+    short_syntax = "services:\n  clone:\n    volumes:\n      - ./data:/app/data:ro\n"
+    assert not data_mount_ok(short_syntax)
 
 
 # --- nothing is reachable from outside -------------------------------------------------------

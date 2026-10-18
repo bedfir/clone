@@ -69,6 +69,10 @@ Two folders, two owners:
 
 Git ignores both, and neither (nor `.env`) is ever copied into an image.
 
+Create both folders yourself before the first start. `compose.yaml` asks Docker not to create a missing folder (`create_host_path: false`), and an engine that honors this stops with a "bind source path does not exist" error. Docker Desktop with WSL (version 4.95, the one tested) ignores it and creates the folder as `root`, which the clone cannot write to; if that happens, remove the folder and create it yourself.
+
+The container runs as user **uid 1000**. If your host user has a different uid, make `state/` writable by uid 1000 (for example `chmod o+w state`, or `chown 1000 state`).
+
 The container is hardened: read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, and no published port, so nothing outside can reach it. Scratch files and tool caches go to a temporary in-memory `/tmp`.
 The source is baked into the image, so rebuild after a change: `docker compose run --rm --build clone pytest`.
 
