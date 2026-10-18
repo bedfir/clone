@@ -17,6 +17,20 @@ One brain, two faces:
 
 Sprint 1, "The clone speaks", in progress. See [BACKLOG.md](BACKLOG.md).
 
+## Development
+
+Requires Python 3.10+.
+
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+ruff check && ruff format --check
+```
+
+`example/` holds a fictional persona for tests and demos. Your real data goes in `data/`, which Git ignores; start from the example with `cp -r example data`.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
