@@ -16,6 +16,18 @@ Acceptance criteria:
 - [ ] `pytest` runs (even with zero real tests) and `ruff check` passes.
 - [ ] `data/` is gitignored; `example/` contains a fictional persona (one personality file, at least three notes).
 
+### S1-1b Containerize
+As a contributor, I want the project to run in Docker so that the environment is identical on every machine and ready for home-server deployment (ADR-005).
+
+Acceptance criteria:
+- [ ] `Dockerfile` based on an official slim Python 3.12 image, running as a non-root user.
+- [ ] A `dev` build target adds the `[dev]` extras (pytest, ruff); the default target installs runtime dependencies only.
+- [ ] `.dockerignore` excludes `data/`, `.env`, `.git`, `.venv` and caches: neither personal data nor secrets can ever enter an image.
+- [ ] `compose.yaml` defines a `clone` service: mounts `./data` read-only at `/app/data`, loads `.env` if present (optional, no error when missing), keeps stdin and a TTY open for the chat.
+- [ ] `docker compose run --rm clone pytest` and `docker compose run --rm clone ruff check` pass.
+- [ ] Until S1-5 provides the `clone` command, the default command prints the package version.
+- [ ] README: Docker becomes the primary way to install, test and run; the local venv stays documented as an alternative.
+
 ### S1-2 Memory with keyword search
 As a user, I want my Markdown notes loaded and searched so that the clone answers from what I actually wrote.
 

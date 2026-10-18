@@ -73,6 +73,9 @@ clone/
 ├── data/                # the user's real data (gitignored)
 ├── tests/
 ├── docs/ARCHITECTURE.md
+├── Dockerfile
+├── compose.yaml
+├── .dockerignore
 ├── BACKLOG.md
 ├── CLAUDE.md
 └── pyproject.toml
@@ -99,3 +102,9 @@ Accepted. Keeps Sprint 1 dependency-free; the retrieval interface must allow swa
 
 ### ADR-004: Apache 2.0 license
 Accepted. Permissive, business-friendly, includes a patent grant.
+
+### ADR-005: Docker as the development and deployment environment
+Accepted. One image, run through Docker Compose, for development, tests and the future home server.
+- Personal data is never baked into an image: `data/` is mounted as a volume, read-only while the clone only reads memory. Making it writable will be an explicit decision.
+- Secrets come from a gitignored `.env` file at runtime, never copied into an image.
+- Later components (local API gateway, vector store, OPC UA simulator, MCP servers) join as services in the same `compose.yaml`, on an internal network.

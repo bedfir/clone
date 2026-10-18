@@ -23,7 +23,7 @@ Implement only what the current story asks. If a story is ambiguous or conflicts
 1. **No personal data in Git.** User data lives in `data/`, which is gitignored. Tests and examples use only the fictional persona in `example/`.
 2. **Secrets come from environment variables** (`ANTHROPIC_API_KEY`, ...). Never hard-code or log them.
 3. **The clone never claims to be the human.** System prompts must state it is an AI acting for its user.
-4. **Local first.** No network call except to the configured language model API, unless a story explicitly adds one.
+4. **Local first.** No network call except to the configured language model API, unless a story explicitly adds one. This applies to the application at runtime; installing development tools is allowed.
 5. **The brain stores nothing.** Persistent state goes through the memory layer only.
 
 ## Conventions
@@ -34,6 +34,7 @@ Implement only what the current story asks. If a story is ambiguous or conflicts
 - Type hints on public functions; small modules with one responsibility.
 - Formatting and linting: `ruff format` and `ruff check`.
 - Tests: `pytest`. The language model is always mocked in tests; the suite must pass with no API key and no network.
+- Docker first (ADR-005): run tests and tools through `docker compose run --rm clone ...` once S1-1b is done. Never copy `data/` or `.env` into an image.
 - Commits: Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`).
 - One story per branch (`story/<id>-<short-name>`) and per pull request.
 
